@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*build/
+*dist/
+*.egg-info/
+venv/
+.env
+
+# Build artifacts
+*.xpi
+!fulltext-attach-plugin-*.xpi
+
+# OS-specific
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary files
+*.tmp
+*.log
+*.bak
+*~
