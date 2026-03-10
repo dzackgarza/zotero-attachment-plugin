@@ -3,3 +3,6 @@ __pycache__/
 *.pyc
 *.xpi
 .DS_Store
+node_modules/
+src/bootstrap.js
+src/manifest.json
