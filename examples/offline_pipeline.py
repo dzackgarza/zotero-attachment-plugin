@@ -23,11 +23,11 @@ Note: This requires the zotero-local-write-api plugin to be installed in Zotero.
 
 import os
 import sys
-import requests
 import html
 from pathlib import Path
 
 try:
+    import requests
     from pyzotero import zotero
     import fitz  # PyMuPDF
     from sentence_transformers import SentenceTransformer
@@ -101,7 +101,7 @@ def generate_embedding(text_content: str, model: SentenceTransformer) -> list:
     embedding = model.encode(truncated_text)
     return embedding.tolist()
 
-def update_zotero_item(item_key: str, text_content: str, has_embedding: bool) -> bool:
+def update_zotero_item(item_key: str, text_content: str, tags: list) -> bool:
     """
     Attach extracted text as a child note and tag the item using the write API.
     """
@@ -124,11 +124,11 @@ def update_zotero_item(item_key: str, text_content: str, has_embedding: bool) ->
         return False
 
     # 2. Add an 'embedded' tag
-    if has_embedding:
+    if tags:
         tag_payload = {
             "operation": "set_item_tags",
             "item_key": item_key,
-            "tags": ["embedded", "fulltext-extracted"]
+            "tags": tags
         }
         try:
             resp = requests.post(ZOTERO_WRITE_API_URL, json=tag_payload, timeout=5)
@@ -186,7 +186,14 @@ def main():
         # We will skip the DB insertion to keep the example lightweight, but we flag it as generated.
         
         print("  -> Updating Zotero item via Local Write API...")
-        success = update_zotero_item(item_key, text_content, has_embedding=bool(embedding))
+        
+        # Preserve existing tags and add our pipeline markers
+        existing_tags = [t.get("tag") for t in item.get("data", {}).get("tags", []) if isinstance(t, dict) and "tag" in t]
+        tags_to_set = []
+        if embedding:
+             tags_to_set = list(set(existing_tags + ["embedded", "fulltext-extracted"]))
+
+        success = update_zotero_item(item_key, text_content, tags=tags_to_set)
         
         if success:
              print("  [OK] Extracted text attached and tags updated successfully!")
