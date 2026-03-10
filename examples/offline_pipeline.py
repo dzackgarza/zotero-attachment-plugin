@@ -73,7 +73,7 @@ def get_pdf_path(client: zotero.Zotero, item_key: str) -> str:
             if data.get("itemType") == "attachment" and data.get("contentType") == "application/pdf":
                 attachment_key = data.get("key")
                 filename = data.get("filename")
-                zotero_data_dir = os.path.expanduser("~/Zotero")
+                zotero_data_dir = os.getenv("ZOTERO_DATA_DIR", os.path.expanduser("~/Zotero"))
                 possible_path = os.path.join(zotero_data_dir, "storage", attachment_key, filename)
                 
                 if os.path.exists(possible_path):
@@ -103,12 +103,26 @@ def generate_embedding(text_content: str, model: SentenceTransformer) -> list:
 
 def update_zotero_item(item_key: str, text_content: str, tags: list) -> bool:
     """
-    Attach extracted text as a child note and tag the item using the write API.
+    Tag the item and attach extracted text as a child note using the write API.
     """
+    # 1. Add an 'embedded' tag (performed first so partial failure doesn't result in skipped items)
+    if tags:
+        tag_payload = {
+            "operation": "set_item_tags",
+            "item_key": item_key,
+            "tags": tags
+        }
+        try:
+            resp = requests.post(ZOTERO_WRITE_API_URL, json=tag_payload, timeout=5)
+            resp.raise_for_status()
+        except requests.exceptions.RequestException as e:
+            print(f"API Error updating tags: {e}")
+            return False
+
+    # 2. Attach the note
     escaped_text = html.escape(text_content[:2000])
     note_html = f"<h1>Fulltext Content</h1><p><pre>{escaped_text}... (truncated)</pre></p>"
     
-    # 1. Attach the note
     attach_payload = {
         "operation": "attach_note",
         "parent_item_key": item_key,
@@ -122,20 +136,6 @@ def update_zotero_item(item_key: str, text_content: str, tags: list) -> bool:
     except requests.exceptions.RequestException as e:
         print(f"API Error attaching note: {e}")
         return False
-
-    # 2. Add an 'embedded' tag
-    if tags:
-        tag_payload = {
-            "operation": "set_item_tags",
-            "item_key": item_key,
-            "tags": tags
-        }
-        try:
-            resp = requests.post(ZOTERO_WRITE_API_URL, json=tag_payload, timeout=5)
-            resp.raise_for_status()
-        except requests.exceptions.RequestException as e:
-            print(f"API Error updating tags: {e}")
-            return False
 
     return True
 
