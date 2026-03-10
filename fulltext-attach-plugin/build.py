@@ -102,16 +102,26 @@ def remove_old_xpis() -> None:
         old_xpi.unlink()
 
 
+_EPOCH = (2020, 1, 1, 0, 0, 0)  # fixed timestamp for deterministic builds
+
+
+def _zip_entry(arcname: str) -> zipfile.ZipInfo:
+    info = zipfile.ZipInfo(arcname, date_time=_EPOCH)
+    info.compress_type = zipfile.ZIP_DEFLATED
+    info.create_system = 0
+    return info
+
+
 def build_xpi() -> Path:
     xpi_path = ROOT / XPI_FILENAME
     icons_dir = ROOT / "icons"
     with zipfile.ZipFile(xpi_path, "w", zipfile.ZIP_DEFLATED) as xpi:
-        xpi.write(MANIFEST_PATH, MANIFEST_PATH.name)
-        xpi.write(BOOTSTRAP_PATH, BOOTSTRAP_PATH.name)
+        for path, arcname in [(MANIFEST_PATH, MANIFEST_PATH.name), (BOOTSTRAP_PATH, BOOTSTRAP_PATH.name)]:
+            xpi.writestr(_zip_entry(arcname), path.read_bytes())
         if icons_dir.is_dir():
-            for icon in icons_dir.iterdir():
+            for icon in sorted(icons_dir.iterdir()):
                 if icon.is_file():
-                    xpi.write(icon, f"icons/{icon.name}")
+                    xpi.writestr(_zip_entry(f"icons/{icon.name}"), icon.read_bytes())
     return xpi_path
 
 

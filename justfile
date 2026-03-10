@@ -81,13 +81,10 @@ _release bump_type: (_bump bump_type)
     cd {{plugin_dir}}
     python3 build.py
     version=$(python3 -c "from version import VERSION; print(VERSION)")
-    xpi="fulltext-attach-plugin-${version}.xpi"
     cd ..
     git add {{plugin_dir}}/version.py {{plugin_dir}}/manifest.json {{plugin_dir}}/updates.json
     git commit -m "chore: release v${version}"
+    git tag "v${version}"
     git push
-    gh release create "v${version}" \
-        --title "v${version}" \
-        --generate-notes \
-        "{{plugin_dir}}/${xpi}#Zotero add-on (.xpi)"
-    echo "Released v${version}: https://github.com/dzackgarza/zotero-attachment-plugin/releases/tag/v${version}"
+    git push --tags
+    echo "v${version} tagged — Actions will publish the release"

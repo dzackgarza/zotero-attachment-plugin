@@ -1,0 +1,32 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Build XPI
+        run: cd fulltext-attach-plugin && python3 build.py
+
+      - name: Get version
+        id: ver
+        run: |
+          echo "version=$(cd fulltext-attach-plugin && python3 -c 'from version import VERSION; print(VERSION)')" >> "$GITHUB_OUTPUT"
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: fulltext-attach-plugin/fulltext-attach-plugin-${{ steps.ver.outputs.version }}.xpi
+          generate_release_notes: true
