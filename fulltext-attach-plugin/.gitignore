@@ -9,9 +9,8 @@ __pycache__/
 venv/
 .env
 
-# Build artifacts
+# Build artifacts — XPIs are published as GitHub Release assets, not committed
 *.xpi
-!fulltext-attach-plugin-*.xpi
 
 # OS-specific
 .DS_Store

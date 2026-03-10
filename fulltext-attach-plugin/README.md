@@ -71,58 +71,24 @@ Example response:
 }
 ```
 
-## Build
+## Build and Release
 
-Run from [`fulltext-attach-plugin`](./):
-
-```bash
-python3 build.py
-```
-
-This regenerates:
-- `manifest.json`
-- `updates.json`
-- `fulltext-attach-plugin-<version>.xpi`
-
-The build uses [`version.py`](./version.py) as the source of truth for:
-- add-on version
-- repo URLs
-- Zotero compatibility window
-- endpoint paths
-
-## Versioning Policy
-
-Every shipped plugin change must bump the minor version.
-
-Use:
+From the repo root:
 
 ```bash
-python3 bump_version.py
+just build      # regenerate manifest.json, updates.json, and local .xpi
+just release    # bump minor version, build, commit, push, create GitHub Release
 ```
 
-Valid bump types:
-- `minor` for normal changes
-- `major` for breaking release lines
-
-`patch` bumps are intentionally rejected.
-
-## GitHub Updates
-
-Auto-update metadata is published from the public repo:
-
-- Repo: `https://github.com/dzackgarza/zotero-attachment-plugin`
-- Update manifest: `https://raw.githubusercontent.com/dzackgarza/zotero-attachment-plugin/main/fulltext-attach-plugin/updates.json`
-
-For Zotero auto-updates to work, the repo must publish both:
-- the rebuilt `updates.json`
-- the rebuilt versioned `.xpi`
+[`version.py`](./version.py) is the single source of truth for the version number, repo URLs, compatibility window, and endpoint paths. All generated artifacts derive from it.
 
 ## Install
 
-1. Build the add-on with `python3 build.py`.
-2. In Zotero, open `Tools -> Add-ons`.
-3. Choose `Install Add-on From File...`.
-4. Select the generated `.xpi`.
+Download the `.xpi` from the [latest GitHub Release](https://github.com/dzackgarza/zotero-attachment-plugin/releases/latest).
+
+1. In Zotero, open `Tools -> Add-ons`.
+2. Choose `Install Add-on From File...`.
+3. Select the downloaded `.xpi`.
 
 After installation, verify:
 - `GET http://127.0.0.1:23119/opencode-zotero-plugin-version` returns the expected version

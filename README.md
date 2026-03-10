@@ -17,29 +17,23 @@ The version probe exists so consumers can require a minimum installed add-on ver
 - Supported Zotero range: `7.0` to `8.0.*`
 - Release target: `8.0.1`
 
-## Release Policy
-
-- Every shipped change bumps the minor version.
-- The canonical release metadata lives in [`version.py`](./fulltext-attach-plugin/version.py).
-- `python3 build.py` regenerates `manifest.json`, `updates.json`, and the versioned `.xpi`.
-- The public repo publishes the rebuilt `updates.json` and `.xpi` so Zotero auto-updates can land from GitHub.
-
 ## Repo Layout
 
 ```text
-fulltext-attach-plugin/   Add-on source, build scripts, manifest, update manifest, and built .xpi
+fulltext-attach-plugin/   Add-on source, build scripts, manifest, and update manifest
 examples/                 Example clients and requests
 scripts/                  Utility scripts
 tests/                    Add-on-specific verification assets
 ```
 
-## Build
+## Build and Release
 
 ```bash
-cd fulltext-attach-plugin
-python3 bump_version.py
-python3 build.py
+just build      # regenerate manifest.json, updates.json, and local .xpi
+just release    # bump minor version, build, commit, push, create GitHub Release
 ```
+
+[`version.py`](./fulltext-attach-plugin/version.py) is the single source of truth for the version number. Everything else is derived from it.
 
 Install the generated `.xpi` from Zotero's `Tools -> Add-ons` menu, then verify:
 
