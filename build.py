@@ -47,16 +47,16 @@ XPI_FILENAME = f"{ADDON_SLUG}-{VERSION}.xpi"
 XPI_URL = f"https://github.com/{REPO_OWNER}/{REPO_NAME}/releases/download/v{VERSION}/{XPI_FILENAME}"
 
 BOOTSTRAP_VAR_PATTERNS = {
-    "PLUGIN_VERSION": re.compile(r"var PLUGIN_VERSION = .*?;"),
-    "FULLTEXT_ATTACH_PATH": re.compile(r"var FULLTEXT_ATTACH_PATH = .*?;"),
-    "LOCAL_WRITE_PATH": re.compile(r"var LOCAL_WRITE_PATH = .*?;"),
-    "VERSION_PATH": re.compile(r"var VERSION_PATH = .*?;"),
-    "ADDON_ID": re.compile(r"var ADDON_ID = .*?;"),
-    "HOMEPAGE_URL": re.compile(r"var HOMEPAGE_URL = .*?;"),
-    "UPDATE_URL": re.compile(r"var UPDATE_URL = .*?;"),
-    "STRICT_MIN_VERSION": re.compile(r"var STRICT_MIN_VERSION = .*?;"),
-    "STRICT_MAX_VERSION": re.compile(r"var STRICT_MAX_VERSION = .*?;"),
-    "TESTED_ZOTERO_VERSION": re.compile(r"var TESTED_ZOTERO_VERSION = .*?;"),
+    "PLUGIN_VERSION": re.compile(r"(?:var|const|let) PLUGIN_VERSION = .*?;"),
+    "FULLTEXT_ATTACH_PATH": re.compile(r"(?:var|const|let) FULLTEXT_ATTACH_PATH = .*?;"),
+    "LOCAL_WRITE_PATH": re.compile(r"(?:var|const|let) LOCAL_WRITE_PATH = .*?;"),
+    "VERSION_PATH": re.compile(r"(?:var|const|let) VERSION_PATH = .*?;"),
+    "ADDON_ID": re.compile(r"(?:var|const|let) ADDON_ID = .*?;"),
+    "HOMEPAGE_URL": re.compile(r"(?:var|const|let) HOMEPAGE_URL = .*?;"),
+    "UPDATE_URL": re.compile(r"(?:var|const|let) UPDATE_URL = .*?;"),
+    "STRICT_MIN_VERSION": re.compile(r"(?:var|const|let) STRICT_MIN_VERSION = .*?;"),
+    "STRICT_MAX_VERSION": re.compile(r"(?:var|const|let) STRICT_MAX_VERSION = .*?;"),
+    "TESTED_ZOTERO_VERSION": re.compile(r"(?:var|const|let) TESTED_ZOTERO_VERSION = .*?;"),
 }
 BOOTSTRAP_VAR_VALUES = {
     "PLUGIN_VERSION": VERSION,
@@ -80,7 +80,7 @@ def update_bootstrap_metadata() -> None:
     source = BOOTSTRAP_PATH.read_text()
     for var, pattern in BOOTSTRAP_VAR_PATTERNS.items():
         source, n = pattern.subn(
-            f"var {var} = {json.dumps(BOOTSTRAP_VAR_VALUES[var])};",
+            f"const {var} = {json.dumps(BOOTSTRAP_VAR_VALUES[var])};",
             source,
             count=1,
         )

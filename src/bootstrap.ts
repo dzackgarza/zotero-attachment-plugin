@@ -1,24 +1,21 @@
 // APP_SHUTDOWN is a Zotero bootstrap constant not in zotero-types
 declare const APP_SHUTDOWN: number;
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-var AttachEndpoint: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-var WriteEndpoint: any;
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-var VersionEndpoint: any;
+let AttachEndpoint: any;
+let WriteEndpoint: any;
+let VersionEndpoint: any;
 
-var PLUGIN_VERSION = "3.2.0-dev";
-var FULLTEXT_ATTACH_PATH = "/attach";
-var LOCAL_WRITE_PATH = "/write";
-var VERSION_PATH = "/version";
-var ADDON_ID = "local-write-api@dzackgarza.com";
-var HOMEPAGE_URL = "https://github.com/dzackgarza/zotero-local-write-api";
-var UPDATE_URL = "https://raw.githubusercontent.com/dzackgarza/zotero-local-write-api/main/updates.json";
-var STRICT_MIN_VERSION = "7.0";
-var STRICT_MAX_VERSION = "*";
-var TESTED_ZOTERO_VERSION = "8.0.1";
-var PLUGIN_CAPABILITIES = [
+const PLUGIN_VERSION = "3.2.0-dev";
+const FULLTEXT_ATTACH_PATH = "/attach";
+const LOCAL_WRITE_PATH = "/write";
+const VERSION_PATH = "/version";
+const ADDON_ID = "local-write-api@dzackgarza.com";
+const HOMEPAGE_URL = "https://github.com/dzackgarza/zotero-local-write-api";
+const UPDATE_URL = "https://raw.githubusercontent.com/dzackgarza/zotero-local-write-api/main/updates.json";
+const STRICT_MIN_VERSION = "7.0";
+const STRICT_MAX_VERSION = "*";
+const TESTED_ZOTERO_VERSION = "8.0.1";
+const PLUGIN_CAPABILITIES = [
 	"attach",
 	"write",
 	"version_probe",
@@ -605,7 +602,6 @@ async function handleMergeItems(data: RequestData): Promise<JsonPayload> {
 				transferred.relations++;
 			}
 		}
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
 		targetItem.setRelations({ ...targetRelations, [predicate]: targetValues } as any);
 		targetRelations = targetItem.getRelations() as unknown as Relations;
 	}
@@ -645,7 +641,6 @@ async function handleCreateItem(data: RequestData): Promise<JsonPayload> {
 	}
 
 	// itemType is user-supplied and validated at runtime
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	const item = new Zotero.Item(itemType as any);
 	// libraryID is readonly in zotero-types but writable on unsaved items
 	(item as unknown as { libraryID: number }).libraryID = userLibraryID();
@@ -897,10 +892,12 @@ async function runWrite(data: RequestData): Promise<JsonPayload> {
 	}
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function install(): void {
 	log("Installed " + PLUGIN_VERSION);
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function startup({ id, version, rootURI }: { id: string; version: string; rootURI: string }): Promise<void> {
 	void id; void version; void rootURI;
 	log("Starting " + PLUGIN_VERSION);
@@ -976,14 +973,17 @@ async function startup({ id, version, rootURI }: { id: string; version: string; 
 	log("Registered " + VERSION_PATH + " endpoint");
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function onMainWindowLoad({ window: _window }: { window: Window }): void {
 	// No window modifications needed
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function onMainWindowUnload({ window: _window }: { window: Window }): void {
 	// No window modifications needed
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function shutdown({ id, version, rootURI }: { id: string; version: string; rootURI: string }, reason: number): void {
 	void id; void version; void rootURI;
 	if (reason === APP_SHUTDOWN) return;
@@ -999,6 +999,7 @@ function shutdown({ id, version, rootURI }: { id: string; version: string; rootU
 	log("Unregistered " + VERSION_PATH + " endpoint");
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function uninstall(): void {
 	log("Uninstalled " + PLUGIN_VERSION);
 }
