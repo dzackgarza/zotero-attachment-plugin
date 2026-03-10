@@ -73,6 +73,8 @@ def get_pdf_path(client: zotero.Zotero, item_key: str) -> str:
             if data.get("itemType") == "attachment" and data.get("contentType") == "application/pdf":
                 attachment_key = data.get("key")
                 filename = data.get("filename")
+                if not filename:
+                    continue
                 zotero_data_dir = os.getenv("ZOTERO_DATA_DIR", os.path.expanduser("~/Zotero"))
                 possible_path = os.path.join(zotero_data_dir, "storage", attachment_key, filename)
                 
