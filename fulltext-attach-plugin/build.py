@@ -18,6 +18,7 @@ from version import (
     LOCAL_WRITE_PATH,
     REPO_URL,
     STRICT_MIN_VERSION,
+    STRICT_MAX_VERSION,
     TESTED_ZOTERO_VERSION,
     UPDATE_MANIFEST_FILENAME,
     UPDATE_MANIFEST_URL,
@@ -41,6 +42,7 @@ BOOTSTRAP_VAR_PATTERNS = {
     "HOMEPAGE_URL": re.compile(r'var HOMEPAGE_URL = .*?;'),
     "UPDATE_URL": re.compile(r'var UPDATE_URL = .*?;'),
     "STRICT_MIN_VERSION": re.compile(r'var STRICT_MIN_VERSION = .*?;'),
+    "STRICT_MAX_VERSION": re.compile(r'var STRICT_MAX_VERSION = .*?;'),
     "TESTED_ZOTERO_VERSION": re.compile(r'var TESTED_ZOTERO_VERSION = .*?;'),
 }
 BOOTSTRAP_VAR_VALUES = {
@@ -52,6 +54,7 @@ BOOTSTRAP_VAR_VALUES = {
     "HOMEPAGE_URL": REPO_URL,
     "UPDATE_URL": UPDATE_MANIFEST_URL,
     "STRICT_MIN_VERSION": STRICT_MIN_VERSION,
+    "STRICT_MAX_VERSION": STRICT_MAX_VERSION,
     "TESTED_ZOTERO_VERSION": TESTED_ZOTERO_VERSION,
 }
 
@@ -69,6 +72,7 @@ def build_manifest() -> dict[str, object]:
             "zotero": {
                 "id": ADDON_ID,
                 "strict_min_version": STRICT_MIN_VERSION,
+                "strict_max_version": STRICT_MAX_VERSION,
                 "update_url": UPDATE_MANIFEST_URL,
             }
         },
@@ -127,6 +131,7 @@ def build_updates_manifest(xpi_hash: str) -> dict[str, object]:
                         "applications": {
                             "zotero": {
                                 "strict_min_version": STRICT_MIN_VERSION,
+                                "strict_max_version": STRICT_MAX_VERSION,
                             }
                         },
                     }
@@ -138,7 +143,7 @@ def build_updates_manifest(xpi_hash: str) -> dict[str, object]:
 
 def build() -> Path:
     print(f"Building {ADDON_NAME} v{VERSION}")
-    print(f"Minimum Zotero version: {STRICT_MIN_VERSION}+")
+    print(f"Zotero compatibility: {STRICT_MIN_VERSION} - {STRICT_MAX_VERSION}")
     print(f"Tested target for release gating: Zotero {TESTED_ZOTERO_VERSION}")
 
     update_bootstrap_metadata()
