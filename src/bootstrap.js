@@ -733,7 +733,7 @@ function detectIdentifier(raw) {
 	if (isbn) {
 		return { ISBN: isbn };
 	}
-	let arxivMatch = raw.match(/(?:arxiv:)?(\d{4}\.\d{4,}(?:v\d+)?|[a-z-]+\/\d{7})/i);
+	let arxivMatch = raw.match(/(?:arxiv:)?(\d{4}\.\d{4,}(?:v\d+)?|[a-z][a-z0-9\-.]+\/\d{7})/i);
 	if (arxivMatch) {
 		return { arXiv: arxivMatch[1] };
 	}
