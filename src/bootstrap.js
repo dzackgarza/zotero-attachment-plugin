@@ -1,6 +1,6 @@
-var FulltextAttachEndpoint;
-var OpenCodeWriteEndpoint;
-var PluginVersionEndpoint;
+var AttachEndpoint;
+var WriteEndpoint;
+var VersionEndpoint;
 var PLUGIN_VERSION = "3.1.9";
 var FULLTEXT_ATTACH_PATH = "/attach";
 var LOCAL_WRITE_PATH = "/write";
@@ -660,6 +660,152 @@ async function handleCreateItem(data) {
 	);
 }
 
+async function handleAddItemTags(data) {
+	let itemKey = requireNonEmptyString(data.item_key, "item_key");
+	let tagsToAdd = normalizeStringList(data.tags, "tags");
+	let item = await getUserItemOrThrow(itemKey);
+	let existing = item.getTags();
+	let existingNames = new Set(existing.map(t => t.tag));
+	let added = [];
+	for (let tag of tagsToAdd) {
+		if (!existingNames.has(tag)) {
+			existing.push({ tag: tag });
+			existingNames.add(tag);
+			added.push(tag);
+		}
+	}
+	item.setTags(existing);
+	await item.saveTx();
+	return successResult("add_item_tags", {
+		item_key: itemKey,
+		added_tags: added,
+		total_tag_count: existing.length,
+	});
+}
+
+async function handleRemoveItemTags(data) {
+	let itemKey = requireNonEmptyString(data.item_key, "item_key");
+	let tagsToRemove = new Set(normalizeStringList(data.tags, "tags"));
+	let item = await getUserItemOrThrow(itemKey);
+	let filtered = item.getTags().filter(t => !tagsToRemove.has(t.tag));
+	let removedCount = item.getTags().length - filtered.length;
+	item.setTags(filtered);
+	await item.saveTx();
+	return successResult("remove_item_tags", {
+		item_key: itemKey,
+		removed_count: removedCount,
+		remaining_tag_count: filtered.length,
+	});
+}
+
+async function handleAddItemToCollection(data) {
+	let itemKey = requireNonEmptyString(data.item_key, "item_key");
+	let collectionKey = requireNonEmptyString(data.collection_key, "collection_key");
+	let item = await getUserItemOrThrow(itemKey);
+	let collection = await getUserCollectionOrThrow(collectionKey);
+	await collection.addItems([item.id]);
+	return successResult("add_item_to_collection", {
+		item_key: itemKey,
+		collection_key: collectionKey,
+		collection_name: collection.name,
+	});
+}
+
+async function handleRemoveItemFromCollection(data) {
+	let itemKey = requireNonEmptyString(data.item_key, "item_key");
+	let collectionKey = requireNonEmptyString(data.collection_key, "collection_key");
+	let item = await getUserItemOrThrow(itemKey);
+	let collection = await getUserCollectionOrThrow(collectionKey);
+	await collection.removeItems([item.id]);
+	return successResult("remove_item_from_collection", {
+		item_key: itemKey,
+		collection_key: collectionKey,
+		collection_name: collection.name,
+	});
+}
+
+function detectIdentifier(raw) {
+	let doi = Zotero.Utilities.cleanDOI(raw);
+	if (doi) {
+		return { DOI: doi };
+	}
+	let isbn = Zotero.Utilities.cleanISBN(raw, false);
+	if (isbn) {
+		return { ISBN: isbn };
+	}
+	let arxivMatch = raw.match(/(?:arxiv:)?(\d{4}\.\d{4,}(?:v\d+)?|[a-z-]+\/\d{7})/i);
+	if (arxivMatch) {
+		return { arXiv: arxivMatch[1] };
+	}
+	if (/^\d{1,10}$/.test(raw.trim())) {
+		return { PMID: raw.trim() };
+	}
+	return null;
+}
+
+async function handleImportByIdentifier(data) {
+	let raw = requireNonEmptyString(data.identifier, "identifier");
+	let identifier = detectIdentifier(raw);
+	if (!identifier) {
+		throw new Error("Could not detect identifier type for: " + raw);
+	}
+	let identifierType = Object.keys(identifier)[0];
+
+	let search = new Zotero.Translate.Search();
+	search.setIdentifier(identifier);
+	let translators = await search.getTranslators();
+	if (!translators || translators.length === 0) {
+		throw new Error("No translator available for " + identifierType + ": " + raw);
+	}
+	search.setTranslator(translators);
+	let items = await search.translate({
+		libraryID: userLibraryID(),
+		collections: [],
+	});
+	if (!items || items.length === 0) {
+		throw new Error("No item found for " + identifierType + ": " + raw);
+	}
+
+	return successResult(
+		"import_by_identifier",
+		{
+			identifier: raw,
+			identifier_type: identifierType,
+			item_count: items.length,
+		},
+		{
+			item_key: items[0].key,
+			item_id: items[0].id,
+		}
+	);
+}
+
+async function handleRestoreItem(data) {
+	let itemKey = requireNonEmptyString(data.item_key, "item_key");
+	let item = await getUserItemOrThrow(itemKey);
+	item.deleted = false;
+	await item.saveTx();
+	return successResult("restore_item", {
+		item_key: itemKey,
+		item_type: item.itemType || null,
+	});
+}
+
+async function handleUpdateAttachmentTitle(data) {
+	let attachmentKey = requireNonEmptyString(data.attachment_key, "attachment_key");
+	let newTitle = requireNonEmptyString(data.new_title, "new_title");
+	let attachment = await getUserItemOrThrow(attachmentKey);
+	if (!attachment.isAttachment()) {
+		throw new Error("Item is not an attachment: " + attachmentKey);
+	}
+	attachment.setField("title", newTitle);
+	await attachment.saveTx();
+	return successResult("update_attachment_title", {
+		attachment_key: attachmentKey,
+		new_title: newTitle,
+	});
+}
+
 async function runWrite(data) {
 	let operation = requireNonEmptyString(data.operation, "operation");
 	switch (operation) {
@@ -669,8 +815,16 @@ async function runWrite(data) {
 			return handleReplaceItemJSON(data);
 		case "set_item_tags":
 			return handleSetItemTags(data);
+		case "add_item_tags":
+			return handleAddItemTags(data);
+		case "remove_item_tags":
+			return handleRemoveItemTags(data);
 		case "set_item_collections":
 			return handleSetItemCollections(data);
+		case "add_item_to_collection":
+			return handleAddItemToCollection(data);
+		case "remove_item_from_collection":
+			return handleRemoveItemFromCollection(data);
 		case "attach_note":
 			return handleAttachNote(data);
 		case "update_note":
@@ -705,6 +859,12 @@ async function runWrite(data) {
 			return handleMergeItems(data);
 		case "create_item":
 			return handleCreateItem(data);
+		case "import_by_identifier":
+			return handleImportByIdentifier(data);
+		case "restore_item":
+			return handleRestoreItem(data);
+		case "update_attachment_title":
+			return handleUpdateAttachmentTitle(data);
 		default:
 			throw new Error("Unsupported operation: " + operation);
 	}
@@ -717,8 +877,8 @@ function install() {
 async function startup({ id, version, rootURI }) {
 	log("Starting " + PLUGIN_VERSION);
 
-	FulltextAttachEndpoint = function() {};
-	FulltextAttachEndpoint.prototype = {
+	AttachEndpoint = function() {};
+	AttachEndpoint.prototype = {
 		supportedMethods: ["POST"],
 		supportedDataTypes: ["application/json"],
 		init: async function(data, sendResponse) {
@@ -742,8 +902,8 @@ async function startup({ id, version, rootURI }) {
 		}
 	};
 
-	OpenCodeWriteEndpoint = function() {};
-	OpenCodeWriteEndpoint.prototype = {
+	WriteEndpoint = function() {};
+	WriteEndpoint.prototype = {
 		supportedMethods: ["POST"],
 		supportedDataTypes: ["application/json"],
 		init: async function(data, sendResponse) {
@@ -769,8 +929,8 @@ async function startup({ id, version, rootURI }) {
 		}
 	};
 
-	PluginVersionEndpoint = function() {};
-	PluginVersionEndpoint.prototype = {
+	VersionEndpoint = function() {};
+	VersionEndpoint.prototype = {
 		supportedMethods: ["GET"],
 		init: function(data, sendResponse) {
 			log("Received GET request to " + VERSION_PATH + " [v" + PLUGIN_VERSION + "]");
@@ -778,9 +938,9 @@ async function startup({ id, version, rootURI }) {
 		}
 	};
 
-	Zotero.Server.Endpoints[FULLTEXT_ATTACH_PATH] = FulltextAttachEndpoint;
-	Zotero.Server.Endpoints[LOCAL_WRITE_PATH] = OpenCodeWriteEndpoint;
-	Zotero.Server.Endpoints[VERSION_PATH] = PluginVersionEndpoint;
+	Zotero.Server.Endpoints[FULLTEXT_ATTACH_PATH] = AttachEndpoint;
+	Zotero.Server.Endpoints[LOCAL_WRITE_PATH] = WriteEndpoint;
+	Zotero.Server.Endpoints[VERSION_PATH] = VersionEndpoint;
 	log("Registered " + FULLTEXT_ATTACH_PATH + " endpoint");
 	log("Registered " + LOCAL_WRITE_PATH + " endpoint");
 	log("Registered " + VERSION_PATH + " endpoint");
@@ -800,9 +960,9 @@ function shutdown({ id, version, rootURI }, reason) {
 	delete Zotero.Server.Endpoints[FULLTEXT_ATTACH_PATH];
 	delete Zotero.Server.Endpoints[LOCAL_WRITE_PATH];
 	delete Zotero.Server.Endpoints[VERSION_PATH];
-	FulltextAttachEndpoint = undefined;
-	OpenCodeWriteEndpoint = undefined;
-	PluginVersionEndpoint = undefined;
+	AttachEndpoint = undefined;
+	WriteEndpoint = undefined;
+	VersionEndpoint = undefined;
 	log("Unregistered " + FULLTEXT_ATTACH_PATH + " endpoint");
 	log("Unregistered " + LOCAL_WRITE_PATH + " endpoint");
 	log("Unregistered " + VERSION_PATH + " endpoint");
