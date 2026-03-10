@@ -1,25 +1,24 @@
 var FulltextAttachEndpoint;
 var OpenCodeWriteEndpoint;
 var PluginVersionEndpoint;
-var PLUGIN_VERSION = "3.1.7";
-var FULLTEXT_ATTACH_PATH = "/fulltext-attach";
-var LOCAL_WRITE_PATH = "/opencode-zotero-write";
-var VERSION_PATH = "/opencode-zotero-plugin-version";
-var ADDON_ID = "fulltext-attach@dzackgarza.com";
+var PLUGIN_VERSION = "3.1.8";
+var FULLTEXT_ATTACH_PATH = "/attach";
+var LOCAL_WRITE_PATH = "/write";
+var VERSION_PATH = "/version";
+var ADDON_ID = "local-write-api@dzackgarza.com";
 var HOMEPAGE_URL = "https://github.com/dzackgarza/zotero-attachment-plugin";
-var UPDATE_URL = "https://raw.githubusercontent.com/dzackgarza/zotero-attachment-plugin/main/fulltext-attach-plugin/updates.json";
+var UPDATE_URL = "https://raw.githubusercontent.com/dzackgarza/zotero-attachment-plugin/main/local-write-api/updates.json";
 var STRICT_MIN_VERSION = "7.0";
 var STRICT_MAX_VERSION = "*";
 var TESTED_ZOTERO_VERSION = "8.0.1";
 var PLUGIN_CAPABILITIES = [
-	"fulltext_attach",
-	"local_write",
-	"create_item",
+	"attach",
+	"write",
 	"version_probe",
 ];
 
 function log(msg) {
-	Zotero.debug("Fulltext Attachment API: " + msg);
+	Zotero.debug("Local Write API: " + msg);
 }
 
 function sendJSON(sendResponse, statusCode, payload) {
@@ -61,8 +60,8 @@ function pluginVersionPayload() {
 		homepage_url: HOMEPAGE_URL,
 		update_url: UPDATE_URL,
 		endpoints: {
-			fulltext_attach: FULLTEXT_ATTACH_PATH,
-			local_write: LOCAL_WRITE_PATH,
+			attach: FULLTEXT_ATTACH_PATH,
+			write: LOCAL_WRITE_PATH,
 			version: VERSION_PATH,
 		},
 		compatibility: {
@@ -661,7 +660,7 @@ async function handleCreateItem(data) {
 	);
 }
 
-async function runOpenCodeWrite(data) {
+async function runWrite(data) {
 	let operation = requireNonEmptyString(data.operation, "operation");
 	switch (operation) {
 		case "update_item_fields":
@@ -734,7 +733,7 @@ async function startup({ id, version, rootURI }) {
 					500,
 					errorResult(
 						"attach_file_to_item",
-						"fulltext_attach_endpoint",
+						"attach_endpoint",
 						error.message,
 						{ request: data || {} }
 					)
@@ -751,7 +750,7 @@ async function startup({ id, version, rootURI }) {
 			try {
 				let operation = data && data.operation ? data.operation : "unknown_operation";
 				log("Received POST request to " + LOCAL_WRITE_PATH + " [operation=" + operation + "]");
-				sendJSON(sendResponse, 200, await runOpenCodeWrite(data || {}));
+				sendJSON(sendResponse, 200, await runWrite(data || {}));
 			}
 			catch (error) {
 				let operation = data && data.operation ? data.operation : "unknown_operation";
@@ -761,7 +760,7 @@ async function startup({ id, version, rootURI }) {
 					500,
 					errorResult(
 						operation,
-						"local_write_endpoint",
+						"write_endpoint",
 						error.message,
 						{ request: data || {} }
 					)
