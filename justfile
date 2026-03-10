@@ -4,11 +4,17 @@ plugin_dir := "fulltext-attach-plugin"
 version:
     @cd {{plugin_dir}} && python3 -c "from version import VERSION; print(VERSION)"
 
-# Regenerate manifest.json, updates.json, and local .xpi from version.py
-build:
-    cd {{plugin_dir}} && python3 build.py
+# Release a patch version — bug fixes, infra, tooling (default)
+release: (_release "patch")
 
-# Generate plugin icons via Replicate (requires REPLICATE_API_TOKEN in env)
+# Release a minor version — new features or behaviour changes
+release-minor: (_release "minor")
+
+# Release a major version — breaking release line
+release-major: (_release "major")
+
+# Regenerate plugin icons via Replicate (requires REPLICATE_API_TOKEN in env)
+# Run this, commit the icons/, then cut a release.
 gen-icons:
     #!/usr/bin/env python3
     import os, time, urllib.request, json
@@ -47,7 +53,8 @@ gen-icons:
     raw.resize((48, 48), Image.LANCZOS).save(icons / "favicon@0.5x.png")
     print("Wrote icons/favicon.png (96x96) and icons/favicon@0.5x.png (48x48)")
 
-# Bump version.py in-place
+# --- private ---
+
 _bump bump_type:
     #!/usr/bin/env python3
     import re, sys
@@ -68,7 +75,6 @@ _bump bump_type:
     path.write_text(re.sub(r'^VERSION = ".*"$', f'VERSION = "{new}"', source, flags=re.MULTILINE))
     print(f"Bumped to {new}")
 
-# Build, commit metadata, push, and create a GitHub Release
 _release bump_type: (_bump bump_type)
     #!/usr/bin/env bash
     set -euo pipefail
@@ -85,12 +91,3 @@ _release bump_type: (_bump bump_type)
         --generate-notes \
         "{{plugin_dir}}/${xpi}#Zotero add-on (.xpi)"
     echo "Released v${version}: https://github.com/dzackgarza/zotero-attachment-plugin/releases/tag/v${version}"
-
-# Release a patch version — bug fixes, infra, tooling (default)
-release: (_release "patch")
-
-# Release a minor version — new features or behaviour changes
-release-minor: (_release "minor")
-
-# Release a major version — breaking release line
-release-major: (_release "major")
