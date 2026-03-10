@@ -1,15 +1,14 @@
 var FulltextAttachEndpoint;
 var OpenCodeWriteEndpoint;
 var PluginVersionEndpoint;
-var PLUGIN_VERSION = "3.1";
+var PLUGIN_VERSION = "3.1.3";
 var FULLTEXT_ATTACH_PATH = "/fulltext-attach";
 var LOCAL_WRITE_PATH = "/opencode-zotero-write";
 var VERSION_PATH = "/opencode-zotero-plugin-version";
-var ADDON_ID = "fulltext-attach-api-v3@local.dev";
+var ADDON_ID = "fulltext-attach@dzackgarza.com";
 var HOMEPAGE_URL = "https://github.com/dzackgarza/zotero-attachment-plugin";
 var UPDATE_URL = "https://raw.githubusercontent.com/dzackgarza/zotero-attachment-plugin/main/fulltext-attach-plugin/updates.json";
 var STRICT_MIN_VERSION = "7.0";
-var STRICT_MAX_VERSION = "8.0.*";
 var TESTED_ZOTERO_VERSION = "8.0.1";
 var PLUGIN_CAPABILITIES = [
 	"fulltext_attach",
@@ -66,7 +65,6 @@ function pluginVersionPayload() {
 		},
 		compatibility: {
 			strict_min_version: STRICT_MIN_VERSION,
-			strict_max_version: STRICT_MAX_VERSION,
 			tested_zotero_version: TESTED_ZOTERO_VERSION,
 		},
 		capabilities: PLUGIN_CAPABILITIES.slice(),
@@ -749,7 +747,8 @@ function onMainWindowUnload({ window }) {
 	// No window modifications needed
 }
 
-function shutdown() {
+function shutdown({ id, version, rootURI }, reason) {
+	if (reason === APP_SHUTDOWN) return;
 	log("Shutting down " + PLUGIN_VERSION);
 	delete Zotero.Server.Endpoints[FULLTEXT_ATTACH_PATH];
 	delete Zotero.Server.Endpoints[LOCAL_WRITE_PATH];

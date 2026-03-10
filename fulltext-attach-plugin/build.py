@@ -10,6 +10,7 @@ import zipfile
 from pathlib import Path
 
 from version import (
+    ADDON_AUTHOR,
     ADDON_DESCRIPTION,
     ADDON_ID,
     ADDON_NAME,
@@ -17,7 +18,6 @@ from version import (
     LOCAL_WRITE_PATH,
     REPO_URL,
     STRICT_MIN_VERSION,
-    STRICT_MAX_VERSION,
     TESTED_ZOTERO_VERSION,
     UPDATE_MANIFEST_FILENAME,
     UPDATE_MANIFEST_URL,
@@ -41,7 +41,6 @@ BOOTSTRAP_VAR_PATTERNS = {
     "HOMEPAGE_URL": re.compile(r'var HOMEPAGE_URL = .*?;'),
     "UPDATE_URL": re.compile(r'var UPDATE_URL = .*?;'),
     "STRICT_MIN_VERSION": re.compile(r'var STRICT_MIN_VERSION = .*?;'),
-    "STRICT_MAX_VERSION": re.compile(r'var STRICT_MAX_VERSION = .*?;'),
     "TESTED_ZOTERO_VERSION": re.compile(r'var TESTED_ZOTERO_VERSION = .*?;'),
 }
 BOOTSTRAP_VAR_VALUES = {
@@ -53,7 +52,6 @@ BOOTSTRAP_VAR_VALUES = {
     "HOMEPAGE_URL": REPO_URL,
     "UPDATE_URL": UPDATE_MANIFEST_URL,
     "STRICT_MIN_VERSION": STRICT_MIN_VERSION,
-    "STRICT_MAX_VERSION": STRICT_MAX_VERSION,
     "TESTED_ZOTERO_VERSION": TESTED_ZOTERO_VERSION,
 }
 
@@ -64,12 +62,13 @@ def build_manifest() -> dict[str, object]:
         "name": ADDON_NAME,
         "version": VERSION,
         "description": ADDON_DESCRIPTION,
+        "author": ADDON_AUTHOR,
         "homepage_url": REPO_URL,
+        "icons": {"48": "icons/favicon@0.5x.png", "96": "icons/favicon.png"},
         "applications": {
             "zotero": {
                 "id": ADDON_ID,
                 "strict_min_version": STRICT_MIN_VERSION,
-                "strict_max_version": STRICT_MAX_VERSION,
                 "update_url": UPDATE_MANIFEST_URL,
             }
         },
@@ -101,9 +100,14 @@ def remove_old_xpis() -> None:
 
 def build_xpi() -> Path:
     xpi_path = ROOT / XPI_FILENAME
+    icons_dir = ROOT / "icons"
     with zipfile.ZipFile(xpi_path, "w", zipfile.ZIP_DEFLATED) as xpi:
         xpi.write(MANIFEST_PATH, MANIFEST_PATH.name)
         xpi.write(BOOTSTRAP_PATH, BOOTSTRAP_PATH.name)
+        if icons_dir.is_dir():
+            for icon in icons_dir.iterdir():
+                if icon.is_file():
+                    xpi.write(icon, f"icons/{icon.name}")
     return xpi_path
 
 
@@ -123,7 +127,6 @@ def build_updates_manifest(xpi_hash: str) -> dict[str, object]:
                         "applications": {
                             "zotero": {
                                 "strict_min_version": STRICT_MIN_VERSION,
-                                "strict_max_version": STRICT_MAX_VERSION,
                             }
                         },
                     }
@@ -135,7 +138,7 @@ def build_updates_manifest(xpi_hash: str) -> dict[str, object]:
 
 def build() -> Path:
     print(f"Building {ADDON_NAME} v{VERSION}")
-    print(f"Target Zotero compatibility window: {STRICT_MIN_VERSION} - {STRICT_MAX_VERSION}")
+    print(f"Minimum Zotero version: {STRICT_MIN_VERSION}+")
     print(f"Tested target for release gating: Zotero {TESTED_ZOTERO_VERSION}")
 
     update_bootstrap_metadata()
