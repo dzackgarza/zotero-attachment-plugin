@@ -24,6 +24,7 @@ Note: This requires the zotero-local-write-api plugin to be installed in Zotero.
 import os
 import sys
 import requests
+import html
 from pathlib import Path
 
 try:
@@ -104,7 +105,8 @@ def update_zotero_item(item_key: str, text_content: str, has_embedding: bool) ->
     """
     Attach extracted text as a child note and tag the item using the write API.
     """
-    note_html = f"<h1>Fulltext Content</h1><p><pre>{text_content[:2000]}... (truncated)</pre></p>"
+    escaped_text = html.escape(text_content[:2000])
+    note_html = f"<h1>Fulltext Content</h1><p><pre>{escaped_text}... (truncated)</pre></p>"
     
     # 1. Attach the note
     attach_payload = {
