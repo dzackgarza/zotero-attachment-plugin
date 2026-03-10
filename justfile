@@ -2,6 +2,21 @@
 version:
     @cat VERSION
 
+# Type-check the TypeScript source
+typecheck:
+    bun tsc --noEmit
+
+# Lint the TypeScript source
+lint:
+    bun run lint
+
+# Compile TypeScript and build the XPI (does not bump version or release)
+build:
+    python3 build.py
+
+# Run all checks (typecheck + lint)
+check: typecheck lint
+
 # Release a patch version — bug fixes, infra, tooling (default)
 release: (_release "patch")
 
