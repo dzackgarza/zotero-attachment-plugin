@@ -6,6 +6,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import subprocess
 import zipfile
 from pathlib import Path
 
@@ -162,11 +163,24 @@ def remove_old_xpis() -> None:
         old_xpi.unlink()
 
 
+def compile_typescript() -> None:
+    result = subprocess.run(
+        ["bun", "run", "build"],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        raise RuntimeError(f"TypeScript compilation failed:\n{result.stderr}")
+    print("Compiled TypeScript")
+
+
 def build() -> Path:
     print(f"Building {ADDON_NAME} v{VERSION}")
     print(f"Zotero compatibility: {STRICT_MIN_VERSION} – {STRICT_MAX_VERSION}")
     print(f"Tested target: Zotero {TESTED_ZOTERO_VERSION}")
 
+    compile_typescript()
     update_bootstrap_metadata()
     manifest = build_manifest()
     write_json(SRC / "manifest.json", manifest)

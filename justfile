@@ -76,9 +76,11 @@ _bump bump_type:
 _release bump_type: (_bump bump_type)
     #!/usr/bin/env bash
     set -euo pipefail
+    bun run typecheck
+    bun run lint
     python3 build.py
     version=$(cat VERSION)
-    git add VERSION updates.json src/bootstrap.js src/manifest.json
+    git add VERSION updates.json
     git commit -m "chore: release v${version}"
     git tag "v${version}"
     git push

@@ -17,8 +17,12 @@ jobs:
         with:
           python-version: '3.x'
 
+      - uses: oven-sh/setup-bun@v2
+
       - name: Install dependencies
-        run: pip install pyyaml
+        run: |
+          pip install pyyaml
+          bun install
 
       - name: Build XPI
         run: python3 build.py
