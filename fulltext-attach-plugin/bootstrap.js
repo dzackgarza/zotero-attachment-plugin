@@ -1,7 +1,7 @@
 var FulltextAttachEndpoint;
 var OpenCodeWriteEndpoint;
 var PluginVersionEndpoint;
-var PLUGIN_VERSION = "3.1.4";
+var PLUGIN_VERSION = "3.1.7";
 var FULLTEXT_ATTACH_PATH = "/fulltext-attach";
 var LOCAL_WRITE_PATH = "/opencode-zotero-write";
 var VERSION_PATH = "/opencode-zotero-plugin-version";
@@ -14,6 +14,7 @@ var TESTED_ZOTERO_VERSION = "8.0.1";
 var PLUGIN_CAPABILITIES = [
 	"fulltext_attach",
 	"local_write",
+	"create_item",
 	"version_probe",
 ];
 
@@ -617,6 +618,49 @@ async function handleMergeItems(data) {
 	});
 }
 
+async function handleCreateItem(data) {
+	let itemType = requireNonEmptyString(data.item_type, "item_type");
+	let fields = data.fields ? requireObject(data.fields, "fields") : {};
+	let tags = data.tags ? normalizeStringList(data.tags, "tags") : [];
+	let collectionKeys = data.collection_keys
+		? normalizeStringList(data.collection_keys, "collection_keys")
+		: [];
+
+	for (let collectionKey of collectionKeys) {
+		await getUserCollectionOrThrow(collectionKey);
+	}
+
+	let item = new Zotero.Item(itemType);
+	item.libraryID = userLibraryID();
+
+	let json = item.toJSON();
+	Object.assign(json, fields);
+	item.fromJSON(json);
+
+	if (tags.length) {
+		item.setTags(tags);
+	}
+	if (collectionKeys.length) {
+		item.setCollections(collectionKeys);
+	}
+
+	await item.saveTx();
+
+	return successResult(
+		"create_item",
+		{
+			item_type: itemType,
+			field_names: Object.keys(fields).sort(),
+			tag_count: tags.length,
+			collection_count: collectionKeys.length,
+		},
+		{
+			item_key: item.key,
+			item_id: item.id,
+		}
+	);
+}
+
 async function runOpenCodeWrite(data) {
 	let operation = requireNonEmptyString(data.operation, "operation");
 	switch (operation) {
@@ -660,6 +704,8 @@ async function runOpenCodeWrite(data) {
 			return handleCopyItem(data);
 		case "merge_items":
 			return handleMergeItems(data);
+		case "create_item":
+			return handleCreateItem(data);
 		default:
 			throw new Error("Unsupported operation: " + operation);
 	}
