@@ -205,7 +205,9 @@ async function materializeUploadBytes(fileName: string, fileBytesBase64: string)
 	for (let index = 0; index < binary.length; index++) {
 		bytes[index] = binary.charCodeAt(index);
 	}
-	await Zotero.File.putContentsAsync(tempDir.path, bytes.buffer);
+	// Zotero.File.putContentsAsync() accepts Blob at runtime, but zotero-types
+	// only advertises string | ArrayBuffer | nsIInputStream.
+	await Zotero.File.putContentsAsync(tempDir.path, new Blob([bytes]) as unknown as ArrayBuffer);
 	return tempDir.path;
 }
 
