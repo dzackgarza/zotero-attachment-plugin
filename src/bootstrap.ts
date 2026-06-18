@@ -23,9 +23,12 @@ let PLUGIN_CAPABILITIES = [
   "write",
   "version_probe",
   "health_probe",
+  "import_bibtex",
   "import_by_identifier",
   "selected_collection",
 ];
+
+let BIBTEX_TRANSLATOR_ID = "9cb70025-a888-4a29-a210-93ec52da40d4";
 
 type RequestData = Record<string, unknown>;
 type SendResponse = (status: number, contentType: string, body: string) => void;
@@ -33,6 +36,15 @@ type JsonPayload = Record<string, unknown>;
 type TagEntry = { tag: string; type: number };
 type Relations = Record<string, string | string[]>;
 type Identifier = Record<string, string>;
+type ImportTranslator = {
+  setTranslator(translatorId: string): void;
+  setString(input: string): void;
+  translate(options: {
+    libraryID: number;
+    collections: number[];
+    saveAttachments: boolean;
+  }): Promise<unknown>;
+};
 type ActiveZoteroPane = {
   getSelectedCollection(): Zotero.Collection | null;
 };
@@ -879,6 +891,72 @@ function extractIdentifiers(raw: string): Identifier[] {
   return identifiers;
 }
 
+function createImportTranslator(): ImportTranslator {
+  let translateApi = Zotero.Translate as {
+    Import: new () => ImportTranslator;
+  };
+  return new translateApi.Import();
+}
+
+function requireImportedItems(value: unknown, operation: string): Zotero.Item[] {
+  if (!Array.isArray(value)) {
+    throw new Error(operation + " did not return an item array");
+  }
+  for (let item of value) {
+    if (typeof item !== "object" || item === null) {
+      throw new Error(operation + " returned a non-object item");
+    }
+    let candidate = item as { key?: unknown; id?: unknown };
+    if (typeof candidate.key !== "string" || typeof candidate.id !== "number") {
+      throw new Error(operation + " returned an item without key/id");
+    }
+  }
+  return value as Zotero.Item[];
+}
+
+async function handleImportBibTeX(data: RequestData) {
+  let bibtex = requireNonEmptyString(data.bibtex, "bibtex");
+  let collectionKeys = data.collection_keys
+    ? normalizeStringList(data.collection_keys, "collection_keys")
+    : [];
+  let collectionIDs: number[] = [];
+  for (let collectionKey of collectionKeys) {
+    let collection = await getUserCollectionOrThrow(collectionKey);
+    collectionIDs.push(collection.id);
+  }
+
+  let translator = createImportTranslator();
+  translator.setTranslator(BIBTEX_TRANSLATOR_ID);
+  translator.setString(bibtex);
+  let items = requireImportedItems(
+    await translator.translate({
+      libraryID: userLibraryID(),
+      collections: collectionIDs,
+      saveAttachments: true,
+    }),
+    "import_bibtex",
+  );
+  if (items.length !== 1) {
+    throw new Error("import_bibtex must create exactly one Zotero item");
+  }
+
+  return successResult(
+    "import_bibtex",
+    {
+      item_count: items.length,
+      collection_keys: collectionKeys,
+      translator_id: BIBTEX_TRANSLATOR_ID,
+    },
+    {
+      item_key: items[0].key,
+      item_id: items[0].id,
+      item_keys: items.map((item) => item.key),
+      item_ids: items.map((item) => item.id),
+      titles: items.map((item) => item.getField("title")),
+    },
+  );
+}
+
 async function translateIdentifier(
   identifier: Identifier,
   collections: number[] | false,
@@ -1025,6 +1103,8 @@ async function runWrite(data: RequestData) {
       return handleMergeItems(data);
     case "create_item":
       return handleCreateItem(data);
+    case "import_bibtex":
+      return handleImportBibTeX(data);
     case "import_by_identifier":
       return handleImportByIdentifier(data);
     case "get_selected_collection":

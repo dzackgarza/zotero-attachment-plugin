@@ -5,6 +5,7 @@ Live smoke proof for the local-write-api add-on.
 This script exercises the add-on against a real running Zotero instance:
 - version probe
 - create_item
+- import_bibtex
 - byte-backed PDF attach
 - delete_tag
 - trash_item
@@ -131,6 +132,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     doomed_tag = f"live-smoke-delete-{suffix}"
     keep_tag = f"live-smoke-keep-{suffix}"
     item_key: str | None = None
+    bibtex_item_key: str | None = None
     write_path = ""
 
     version_payload = _request_json("GET", f"{base_url}/version")
@@ -151,7 +153,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
     capabilities = version_payload.get("capabilities", [])
     _require(isinstance(capabilities, list), f"Version probe did not include capabilities list: {version_payload!r}")
-    for capability in ("attach", "attach_bytes", "write", "version_probe"):
+    for capability in ("attach", "attach_bytes", "write", "version_probe", "import_bibtex"):
         _require(capability in capabilities, f"Missing required capability {capability!r}: {capabilities!r}")
 
     try:
@@ -184,6 +186,31 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         _require(created_item.get("data", {}).get("title") == f"live-smoke-item-{suffix}", f"Unexpected item title: {created_item!r}")
         created_tags = set(_tag_names(created_item))
         _require(created_tags == {doomed_tag, keep_tag}, f"Unexpected initial tags: {created_tags!r}")
+
+        bibtex_title = f"live-smoke-bibtex-{suffix}"
+        bibtex_result = _post_write(
+            base_url,
+            write_path,
+            {
+                "operation": "import_bibtex",
+                "bibtex": (
+                    f"@book{{localwritesmoke{suffix},\n"
+                    f"  title = {{{bibtex_title}}},\n"
+                    "  author = {BibTeX Smoke},\n"
+                    "  year = {2026},\n"
+                    "  publisher = {Local Write API Smoke}\n"
+                    "}\n"
+                ),
+            },
+        )
+        _require(bibtex_result.get("success") is True, f"import_bibtex failed: {bibtex_result!r}")
+        bibtex_item_key = bibtex_result.get("item_key")
+        _require(isinstance(bibtex_item_key, str) and bibtex_item_key, f"import_bibtex did not return item_key: {bibtex_result!r}")
+        bibtex_item = _get_item(base_url, library_id, bibtex_item_key)
+        _require(
+            bibtex_item.get("data", {}).get("title") == bibtex_title,
+            f"import_bibtex read-back title mismatch: {bibtex_item!r}",
+        )
 
         attach_result = _post_attach(
             base_url,
@@ -242,11 +269,13 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "success": True,
             "version": version_payload.get("version"),
             "item_key": item_key,
+            "bibtex_item_key": bibtex_item_key,
             "attachment_key": attachment_key,
             "deleted_tag": doomed_tag,
             "kept_tag": keep_tag,
         }
     finally:
+        _cleanup_item(base_url, write_path, bibtex_item_key)
         _cleanup_item(base_url, write_path, item_key)
 
 

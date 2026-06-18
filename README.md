@@ -137,6 +137,7 @@ Response:
 It performs the library mutations and local UI queries that Zotero's built-in local API does not expose for the user library:
 
 - create, update, copy, merge, trash, and restore Zotero items
+- import exactly one Zotero item from BibTeX through Zotero's BibTeX translator
 - import new Zotero items from DOI, ISBN, arXiv ID, PMID, or other identifiers Zotero can parse
 - create, update, and attach child notes and URL attachments
 - attach, relink, and retitle attachment files
@@ -168,6 +169,7 @@ Accepted operations:
 | Operation | Required fields | Optional fields | Effect |
 | --- | --- | --- | --- |
 | `create_item` | `item_type: string` | `fields: object`, `tags: string[]`, `collection_keys: string[]` | Create a new Zotero item in the user library. |
+| `import_bibtex` | `bibtex: string` | `collection_keys: string[]` | Import exactly one Zotero item from BibTeX using Zotero's built-in BibTeX translator. |
 | `import_by_identifier` | `identifier: string` | `collection_keys: string[]` | Ask Zotero translators to import items from DOI, ISBN, arXiv ID, PMID, or another identifier Zotero can parse. Attachments are saved when Zotero's translator provides them. |
 | `update_item_fields` | `item_key: string`, `fields: object` | none | Merge fields into an existing item's Zotero JSON. |
 | `replace_item_json` | `item_key: string`, `item_json: object` | none | Replace an existing item from Zotero item JSON. |
@@ -202,6 +204,8 @@ String arrays must contain strings; blank entries and duplicates are ignored.
 Collection keys are validated before item collection writes.
 
 The `import_by_identifier` implementation follows Zotero's own identifier extraction and translator flow: it parses identifiers with `Zotero.Utilities.extractIdentifiers`, runs `Zotero.Translate.Search`, saves translated items into the user library, and saves translator-provided attachments.
+
+The `import_bibtex` implementation uses Zotero's own BibTeX import translator (`9cb70025-a888-4a29-a210-93ec52da40d4`) and rejects any import result that does not create exactly one item.
 
 Response shape:
 
