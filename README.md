@@ -1,15 +1,13 @@
 # Local Write API
 
-Zotero add-on that registers local HTTP write endpoints on Zotero's existing server at `http://127.0.0.1:23119`.
-Zotero's built-in local API is read-only; this add-on adds item, note, attachment, collection, and tag mutations for the user library.
+Zotero add-on that registers local HTTP write endpoints on Zotero's existing server at `http://127.0.0.1:23119`. Zotero's built-in local API is read-only; this add-on adds item, note, attachment, collection, and tag mutations for the user library.
 
 ## Install
 
 Install the release `.xpi` in Zotero from `Tools -> Add-ons -> Install Add-on From File`.
 
 Zotero must be running while clients call these endpoints.
-Zotero's local HTTP server must be enabled at `http://127.0.0.1:23119`.
-The endpoints require no API key because they run on Zotero's local HTTP server.
+Zotero's local HTTP server must be enabled at `http://127.0.0.1:23119`. The endpoints require no API key because they run on Zotero's local HTTP server.
 
 ## Endpoints
 
@@ -136,20 +134,17 @@ Response:
 ## `/write`
 
 `/write` is the general Zotero operation endpoint.
-It performs the library mutations and local UI queries that Zotero's built-in
-local API does not expose for the user library:
+It performs the library mutations and local UI queries that Zotero's built-in local API does not expose for the user library:
 
 - create, update, copy, merge, trash, and restore Zotero items
-- import new Zotero items from DOI, ISBN, arXiv ID, PMID, or other identifiers
-  Zotero can parse
+- import new Zotero items from DOI, ISBN, arXiv ID, PMID, or other identifiers Zotero can parse
 - create, update, and attach child notes and URL attachments
 - attach, relink, and retitle attachment files
 - create, rename, move, merge, trash, and assign collections
 - add, remove, replace, rename, merge, and purge tags
 - return the collection currently selected in the active Zotero pane
 
-Every request is a JSON object with an `operation` string and the fields required
-by that operation.
+Every request is a JSON object with an `operation` string and the fields required by that operation.
 
 ```http
 POST /write
@@ -206,11 +201,7 @@ String fields marked `string` must be non-empty unless the table says otherwise.
 String arrays must contain strings; blank entries and duplicates are ignored.
 Collection keys are validated before item collection writes.
 
-The `import_by_identifier` implementation follows Zotero's own identifier
-extraction and translator flow: it parses identifiers with
-`Zotero.Utilities.extractIdentifiers`, runs `Zotero.Translate.Search`, saves
-translated items into the user library, and saves translator-provided
-attachments.
+The `import_by_identifier` implementation follows Zotero's own identifier extraction and translator flow: it parses identifiers with `Zotero.Utilities.extractIdentifiers`, runs `Zotero.Translate.Search`, saves translated items into the user library, and saves translator-provided attachments.
 
 Response shape:
 

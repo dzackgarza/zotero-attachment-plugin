@@ -19,5 +19,5 @@ endpoints:
   version: /version
 fulltext_attach:
   allowed_dirs:
-  - /tmp
-  - /var/tmp
+    - /tmp
+    - /var/tmp
