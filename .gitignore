@@ -4,5 +4,6 @@ __pycache__/
 *.xpi
 .DS_Store
 node_modules/
+lcov.info
 src/bootstrap.js
 src/manifest.json

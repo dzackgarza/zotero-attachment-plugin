@@ -1,3 +1,13 @@
+qc-type := "bun"
+
+# Run the full local QC contract
+test:
+    @just -f ~/ai-review-ci/justfiles/bun.just -d . test
+
+# Run the full CI QC contract
+test-ci:
+    @just -f ~/ai-review-ci/justfiles/bun.just -d . test-ci
+
 # Show the current version
 version:
     @cat VERSION

@@ -1,0 +1,155 @@
+version = 3
+
+[markdown]
+refs_extension = ""
+date_format = "%b %d, %Y"
+
+[markdown.formatting]
+
+[library]
+path = ""
+date_format = "%Y-%m-%d"
+
+[completion]
+
+[commands.default]
+run = "claude -p"
+timeout_seconds = 120
+
+[actions.inline_section]
+type = "inline"
+title = "Inline section"
+inline_type = "section"
+keep_target = false
+
+[actions.link]
+type = "link"
+title = "Link"
+link_type = "markdown"
+key_template = "{{id}}"
+
+[actions.today]
+type = "attach"
+title = "Add Date"
+key_template = "{{today}}"
+document_template = """
+# {{today}}
+
+{{content}}
+"""
+
+[actions.expand]
+type = "transform"
+title = "Expand"
+command = "default"
+input_template = """
+Here's a text that I'm going to ask you to edit. The text is marked with {{context_start}}{{context_end}} tag.
+
+The part you'll need to update is marked with {{update_start}}{{update_end}}.
+
+{{context_start}}
+
+{{context}}
+
+{{context_end}}
+
+- You can't replace entire text, your answer will be inserted in place of the {{update_start}}{{update_end}}. Don't include the {{context_start}}{{context_end}} and {{context_start}}{{context_end}} tags in your output.
+- Preserve the links in the text. Do not return list item "-" or header "#" prefix
+
+Expand the text you need to update, generate a couple paragraphs.
+"""
+
+[actions.keywords]
+type = "transform"
+title = "Keywords"
+command = "default"
+input_template = """
+Here's a text that I'm going to ask you to edit. The text is marked with {{context_start}}{{context_end}} tag.
+
+The part you'll need to update is marked with {{update_start}}{{update_end}}.
+
+{{context_start}}
+
+{{context}}
+
+{{context_end}}
+
+- You can't replace entire text, your answer will be inserted in place of the {{update_start}}{{update_end}}. Don't include the {{context_start}}{{context_end}} and {{context_start}}{{context_end}} tags in your output.
+
+Mark most important keywords with bold using ** markdown syntax. Keep the text unchanged!
+"""
+
+[actions.inline_quote]
+type = "inline"
+title = "Inline quote"
+inline_type = "quote"
+keep_target = false
+
+[actions.extract]
+type = "extract"
+title = "Extract"
+link_type = "markdown"
+key_template = "{{id}}"
+
+[actions.rewrite]
+type = "transform"
+title = "Rewrite"
+command = "default"
+input_template = """
+Here's a text that I'm going to ask you to edit. The text is marked with {{context_start}}{{context_end}} tag.
+
+The part you'll need to update is marked with {{update_start}}{{update_end}}.
+
+{{context_start}}
+
+{{context}}
+
+{{context_end}}
+
+- You can't replace entire text, your answer will be inserted in place of the {{update_start}}{{update_end}}. Don't include the {{context_start}}{{context_end}} and {{context_start}}{{context_end}} tags in your output.
+- Preserve the links in the text. Do not return list item "-" or header "#" prefix
+
+Your goal is to rewrite a given text to improve its clarity and readability. Ensure the language remains personable and not overly formal. Focus on simplifying language, organizing sentences logically, and removing ambiguity while maintaining a conversational tone.
+"""
+
+[actions.sort_desc]
+type = "sort"
+title = "Sort Z-A"
+reverse = true
+
+[actions.sort]
+type = "sort"
+title = "Sort A-Z"
+reverse = false
+
+[actions.extract_all]
+type = "extract_all"
+title = "Extract all subsections"
+link_type = "markdown"
+key_template = "{{id}}"
+
+[actions.emoji]
+type = "transform"
+title = "Emojify"
+command = "default"
+input_template = """
+Here's a text that I'm going to ask you to edit. The text is marked with {{context_start}} {{context_end}} tags.
+
+- The part you'll need to update is marked with {{update_start}} {{update_end}} tags.
+- You can't replace entire text, your answer will be inserted in between {{update_start}} {{update_end}} tags.
+- Add a relevant emoji one per list item (prior to list item text), header (prior to header text) or paragraph. Keep the text otherwise unchanged.
+- Don't include the {{update_start}} {{update_end}} tags in your answer.
+
+{{context_start}}
+
+{{context}}
+
+{{context_end}}
+"""
+
+[templates.default]
+key_template = "{{slug}}"
+document_template = """
+# {{title}}
+
+{{content}}"""
