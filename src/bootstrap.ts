@@ -24,6 +24,8 @@ const PLUGIN_CAPABILITIES = [
 	"health_probe",
 	"import_by_identifier",
 	"selected_collection",
+	"sync",
+	"run_javascript",
 ];
 
 type RequestData = Record<string, unknown>;
@@ -946,9 +948,47 @@ async function handleUpdateAttachmentTitle(data: RequestData): Promise<JsonPaylo
 	});
 }
 
+async function handleSync(data: RequestData): Promise<JsonPayload> {
+	void data;
+	const runner = (Zotero as any).Sync && (Zotero as any).Sync.Runner;
+	if (!runner || typeof runner.sync !== "function") {
+		throw new Error("Zotero.Sync.Runner.sync is unavailable");
+	}
+	// Foreground sync so the call resolves once the sync engine has run.
+	const result = await runner.sync({ background: false });
+	let serialized: unknown;
+	try {
+		serialized = JSON.parse(JSON.stringify(result ?? null));
+	} catch {
+		serialized = String(result);
+	}
+	return successResult("sync", { triggered: true, result: serialized });
+}
+
+async function handleRunJavascript(data: RequestData): Promise<JsonPayload> {
+	// Debug endpoint: evaluate arbitrary internal JavaScript in the add-on's privileged
+	// chrome scope, with `Zotero` in scope and `await` supported. Single-user dev tool.
+	const code = requireNonEmptyString(data.code, "code");
+	const AsyncFunction = Object.getPrototypeOf(async function() {}).constructor as
+		(new (...args: string[]) => (zotero: typeof Zotero) => Promise<unknown>);
+	const fn = new AsyncFunction("Zotero", code);
+	const result = await fn(Zotero);
+	let serialized: unknown;
+	try {
+		serialized = JSON.parse(JSON.stringify(result ?? null));
+	} catch {
+		serialized = String(result);
+	}
+	return successResult("run_javascript", { result: serialized });
+}
+
 async function runWrite(data: RequestData): Promise<JsonPayload> {
 	const operation = requireNonEmptyString(data.operation, "operation");
 	switch (operation) {
+		case "sync":
+			return handleSync(data);
+		case "run_javascript":
+			return handleRunJavascript(data);
 		case "update_item_fields":
 			return handleUpdateItemFields(data);
 		case "replace_item_json":
