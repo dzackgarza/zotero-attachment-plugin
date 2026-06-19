@@ -636,14 +636,35 @@ async function handleDeleteTag(data: RequestData) {
   if (!tagID) {
     throw new Error("Tag not found: " + tagName);
   }
+
+  // Remove the tag from every item that carries it before removing it from the
+  // library, and report how many items changed.
+  let search = new Zotero.Search();
+  (search as unknown as { libraryID: number }).libraryID = userLibraryID();
+  search.addCondition("tag", "is", tagName);
+  let itemIDs = await search.search();
+
+  let modifiedCount = 0;
+  if (itemIDs && itemIDs.length > 0) {
+    let items = await Zotero.Items.getAsync(itemIDs);
+    for (let item of items) {
+      if (item.removeTag(tagName)) {
+        await item.saveTx();
+        modifiedCount++;
+      }
+    }
+  }
+
   await Zotero.Tags.removeFromLibrary(
     userLibraryID(),
     [tagID],
     () => {},
     undefined as unknown as number[],
   );
+
   return successResult("delete_tag", {
     tag_name: tagName,
+    modified_item_count: modifiedCount,
   });
 }
 
