@@ -4,16 +4,15 @@ This directory contains standalone examples demonstrating how combining Zotero's
 
 ## Prerequisites
 
-Each script is a self-contained [PEP 723](https://peps.python.org/pep-0723/) `uv`
-script: its dependencies are declared in the script header and provisioned automatically.
+Each script is a self-contained [PEP 723](https://peps.python.org/pep-0723/) `uv` script: its dependencies are declared in the script header and provisioned automatically.
 Run any example directly with `uv`:
 
 ```bash
 uv run live_smoke.py
 ```
 
-No separate install step is needed. Ensure your Zotero is running with the
-`zotero-local-write-api` extension installed.
+No separate install step is needed.
+Ensure your Zotero is running with the `zotero-local-write-api` extension installed.
 
 ## Scripts
 

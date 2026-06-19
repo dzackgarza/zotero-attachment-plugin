@@ -148,15 +148,17 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             f"Expected add-on version {args.expected_version}, got {version_payload.get('version')!r}",
         )
 
-    endpoints = version_payload.get("endpoints", {})
-    _require(isinstance(endpoints, dict), f"Version probe did not include endpoints: {version_payload!r}")
+    _require("endpoints" in version_payload, f"Version probe did not include endpoints: {version_payload!r}")
+    endpoints = version_payload["endpoints"]
+    _require(isinstance(endpoints, dict), f"Version probe endpoints is not an object: {version_payload!r}")
     attach_path = endpoints.get("attach")
     write_path = endpoints.get("write")
     _require(isinstance(attach_path, str) and attach_path.startswith("/"), f"Invalid attach endpoint: {attach_path!r}")
     _require(isinstance(write_path, str) and write_path.startswith("/"), f"Invalid write endpoint: {write_path!r}")
 
-    capabilities = version_payload.get("capabilities", [])
-    _require(isinstance(capabilities, list), f"Version probe did not include capabilities list: {version_payload!r}")
+    _require("capabilities" in version_payload, f"Version probe did not include capabilities: {version_payload!r}")
+    capabilities = version_payload["capabilities"]
+    _require(isinstance(capabilities, list), f"Version probe capabilities is not a list: {version_payload!r}")
     for capability in ("attach", "attach_bytes", "write", "version_probe", "import_bibtex"):
         _require(capability in capabilities, f"Missing required capability {capability!r}: {capabilities!r}")
 
@@ -229,8 +231,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         _require(attach_result.get("success") is True, f"/attach failed: {attach_result!r}")
         attachment_key = attach_result.get("attachment_key")
         _require(isinstance(attachment_key, str) and attachment_key, f"Missing attachment_key: {attach_result!r}")
-        attach_details = attach_result.get("details", {})
-        _require(attach_details.get("source_mode") == "bytes", f"Expected bytes source_mode, got: {attach_result!r}")
+        _require("details" in attach_result, f"/attach response missing details: {attach_result!r}")
+        attach_details = attach_result["details"]
+        _require(attach_details["source_mode"] == "bytes", f"Expected bytes source_mode, got: {attach_result!r}")
 
         children = _get_children(base_url, library_id, item_key)
         matching_attachment = next((child for child in children if child.get("key") == attachment_key), None)

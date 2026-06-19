@@ -2,28 +2,25 @@
 declare let APP_SHUTDOWN: number;
 
 // Single source of truth for the places where zotero-types under-models fields that
-// Zotero accepts at runtime. Each augmentation widens exactly one method/field to the
-// real runtime contract; consumers below reference these instead of scattering casts.
-// bootstrap.ts is a global script (no imports/exports), so these plain namespace
-// declarations merge into the ambient zotero-types declarations.
-declare namespace _ZoteroTypes {
-  interface Tags {
-    // onProgress and types are optional at runtime (Tags.js guards `if (onProgress)`
-    // and `if (types)`); zotero-types incorrectly marks both required.
-    removeFromLibrary(
-      libraryID: number,
-      tagIDs: number[],
-      onProgress?: (done: number, total: number) => void,
-      types?: number[],
-    ): Promise<void>;
-  }
-}
+// Zotero accepts at runtime. Each helper owns exactly one runtime-contract widening so
+// the rest of the file reads cleanly typed instead of scattering casts.
 
 // Zotero accepts `false` for Collection.parentKey to detach a collection from its
 // parent, but zotero-types models the field as `string`. This is the single owned site
 // that writes that runtime contract; callers go through it instead of casting.
 function setCollectionParentKey(collection: Zotero.Collection, parentKey: string | false): void {
   (collection as { parentKey: string | false }).parentKey = parentKey;
+}
+
+// Tags.js guards `if (onProgress)` and `if (types)`, so both are optional at runtime;
+// zotero-types incorrectly marks them required. This is the single owned site that calls
+// removeFromLibrary against its real two-argument contract.
+function removeTagsFromUserLibrary(libraryID: number, tagIDs: number[]): Promise<void> {
+  let remove = Zotero.Tags.removeFromLibrary as (
+    libraryID: number,
+    tagIDs: number[],
+  ) => Promise<void>;
+  return remove(libraryID, tagIDs);
 }
 
 // A Zotero HTTP endpoint is registered as a constructor function whose prototype carries
@@ -112,14 +109,14 @@ function errorResult(
   operation: string,
   stage: string,
   error: string,
-  details?: JsonPayload,
+  details: JsonPayload,
 ): JsonPayload {
   return {
     success: false,
     operation: operation,
     stage: stage,
     error: error,
-    details: details ?? {},
+    details: details,
     version: PLUGIN_VERSION,
   };
 }
@@ -356,7 +353,7 @@ async function handleFulltextAttach(data: RequestData) {
         if (!fileBytesBase64 || !isMissingFileError(error)) {
           throw error;
         }
-        let fallbackName = fileName || Zotero.File.pathToFile(filePath).leafName;
+        let fallbackName = fileName ? fileName : Zotero.File.pathToFile(filePath).leafName;
         tempPath = await materializeUploadBytes(fallbackName, fileBytesBase64);
         attachment = await importStoredAttachment(parentItem, tempPath, title);
         sourceMode = "bytes_fallback";
@@ -512,7 +509,7 @@ async function handleAttachURL(data: RequestData) {
       parent_item_key: parentItemKey,
       url: url,
       // Report the requested title, or the title Zotero auto-assigned when none was given.
-      title: title ?? attachment.getField("title"),
+      title: title === null ? attachment.getField("title") : title,
     },
     {
       attachment_key: attachment.key,
@@ -589,7 +586,8 @@ async function handleMoveCollection(data: RequestData) {
     newParentKey = data.new_parent_key.trim();
     await getUserCollectionOrThrow(newParentKey);
   }
-  setCollectionParentKey(collection, newParentKey ?? false);
+  // `false` is Zotero's documented "no parent" sentinel when no new parent was given.
+  setCollectionParentKey(collection, newParentKey === null ? false : newParentKey);
   await collection.saveTx();
 
   return successResult("move_collection", collectionDetails(collection));
@@ -692,7 +690,7 @@ async function handleDeleteTag(data: RequestData) {
     }
   }
 
-  await Zotero.Tags.removeFromLibrary(userLibraryID(), [tagID]);
+  await removeTagsFromUserLibrary(userLibraryID(), [tagID]);
 
   return successResult("delete_tag", {
     tag_name: tagName,
@@ -1251,7 +1249,7 @@ async function startup({
         sendJSON(
           sendResponse,
           500,
-          errorResult("attach_file_to_item", "attach_endpoint", msg, { request: data ?? {} }),
+          errorResult("attach_file_to_item", "attach_endpoint", msg, { request: data }),
         );
       }
     },
@@ -1262,18 +1260,19 @@ async function startup({
     supportedMethods: ["POST"],
     supportedDataTypes: ["application/json"],
     init: async function (data: RequestData, sendResponse: SendResponse) {
+      // operation may be absent on a malformed request; label it explicitly for
+      // diagnostics. This is the error-rendering boundary, not a runtime default.
+      let operationLabel = typeof data.operation === "string" ? data.operation : "unknown_operation";
       try {
-        let operation = data?.operation ?? "unknown_operation";
-        log("Received POST request to " + LOCAL_WRITE_PATH + " [operation=" + operation + "]");
-        sendJSON(sendResponse, 200, await runWrite(data ?? {}));
+        log("Received POST request to " + LOCAL_WRITE_PATH + " [operation=" + operationLabel + "]");
+        sendJSON(sendResponse, 200, await runWrite(data));
       } catch (error) {
-        let operation = data?.operation ?? "unknown_operation";
         let msg = (error as Error).message;
-        log("Error in " + LOCAL_WRITE_PATH + " [operation=" + operation + "]: " + msg);
+        log("Error in " + LOCAL_WRITE_PATH + " [operation=" + operationLabel + "]: " + msg);
         sendJSON(
           sendResponse,
           500,
-          errorResult(String(operation), "write_endpoint", msg, { request: data ?? {} }),
+          errorResult(operationLabel, "write_endpoint", msg, { request: data }),
         );
       }
     },
