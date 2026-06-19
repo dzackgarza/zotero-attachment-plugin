@@ -198,6 +198,8 @@ Accepted operations:
 | `add_item_to_collection` | `item_key: string`, `collection_key: string` | none | Add an item to one collection. |
 | `remove_item_from_collection` | `item_key: string`, `collection_key: string` | none | Remove an item from one collection. |
 | `get_selected_collection` | none | none | Return the key and name of the collection selected in Zotero's active pane. |
+| `sync` | none | none | Trigger a foreground Zotero sync via `Zotero.Sync.Runner.sync({background:false})`. Returns when the sync engine has run. |
+| `run_javascript` | `code: string` | none | **Debug.** Evaluate arbitrary internal JavaScript in the add-on's privileged chrome scope, with `Zotero` in scope and `await` supported (the body is wrapped in an async function). Returns the JSON-serializable value the code returns. Single-user dev tool; it is unsandboxed by design. |
 
 String fields marked `string` must be non-empty unless the table says otherwise.
 String arrays must contain strings; blank entries and duplicates are ignored.

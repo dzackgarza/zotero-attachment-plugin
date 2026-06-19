@@ -26,6 +26,8 @@ let PLUGIN_CAPABILITIES = [
   "import_bibtex",
   "import_by_identifier",
   "selected_collection",
+  "sync",
+  "run_javascript",
 ];
 
 let BIBTEX_TRANSLATOR_ID = "9cb70025-a888-4a29-a210-93ec52da40d4";
@@ -1050,9 +1052,48 @@ async function handleUpdateAttachmentTitle(data: RequestData) {
   });
 }
 
+async function handleSync(data: RequestData) {
+  void data;
+  let runner = (Zotero as any).Sync && (Zotero as any).Sync.Runner;
+  if (!runner || typeof runner.sync !== "function") {
+    throw new Error("Zotero.Sync.Runner.sync is unavailable");
+  }
+  // Foreground sync so the call resolves once the sync engine has run.
+  let result = await runner.sync({ background: false });
+  let serialized: unknown;
+  try {
+    serialized = JSON.parse(JSON.stringify(result ?? null));
+  } catch {
+    serialized = String(result);
+  }
+  return successResult("sync", { triggered: true, result: serialized });
+}
+
+async function handleRunJavascript(data: RequestData) {
+  // Debug endpoint: evaluate arbitrary internal JavaScript in the add-on's privileged
+  // chrome scope, with `Zotero` in scope and `await` supported. Single-user dev tool.
+  let code = requireNonEmptyString(data.code, "code");
+  let AsyncFunction = Object.getPrototypeOf(async function () {}).constructor as new (
+    ...args: string[]
+  ) => (zotero: typeof Zotero) => Promise<unknown>;
+  let fn = new AsyncFunction("Zotero", code);
+  let result = await fn(Zotero);
+  let serialized: unknown;
+  try {
+    serialized = JSON.parse(JSON.stringify(result ?? null));
+  } catch {
+    serialized = String(result);
+  }
+  return successResult("run_javascript", { result: serialized });
+}
+
 async function runWrite(data: RequestData) {
   let operation = requireNonEmptyString(data.operation, "operation");
   switch (operation) {
+    case "sync":
+      return handleSync(data);
+    case "run_javascript":
+      return handleRunJavascript(data);
     case "update_item_fields":
       return handleUpdateItemFields(data);
     case "replace_item_json":
