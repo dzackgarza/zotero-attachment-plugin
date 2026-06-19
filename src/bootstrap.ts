@@ -1,9 +1,43 @@
 // APP_SHUTDOWN is a Zotero bootstrap constant not in zotero-types
 declare let APP_SHUTDOWN: number;
 
-let AttachEndpoint: any;
-let WriteEndpoint: any;
-let VersionEndpoint: any;
+// Single source of truth for the places where zotero-types under-models fields that
+// Zotero accepts at runtime. Each augmentation widens exactly one method/field to the
+// real runtime contract; consumers below reference these instead of scattering casts.
+// bootstrap.ts is a global script (no imports/exports), so these plain namespace
+// declarations merge into the ambient zotero-types declarations.
+declare namespace _ZoteroTypes {
+  interface Tags {
+    // onProgress and types are optional at runtime (Tags.js guards `if (onProgress)`
+    // and `if (types)`); zotero-types incorrectly marks both required.
+    removeFromLibrary(
+      libraryID: number,
+      tagIDs: number[],
+      onProgress?: (done: number, total: number) => void,
+      types?: number[],
+    ): Promise<void>;
+  }
+}
+
+// Zotero accepts `false` for Collection.parentKey to detach a collection from its
+// parent, but zotero-types models the field as `string`. This is the single owned site
+// that writes that runtime contract; callers go through it instead of casting.
+function setCollectionParentKey(collection: Zotero.Collection, parentKey: string | false): void {
+  (collection as { parentKey: string | false }).parentKey = parentKey;
+}
+
+// A Zotero HTTP endpoint is registered as a constructor function whose prototype carries
+// the request metadata and init handler. The slot is cleared to undefined on shutdown.
+type EndpointPrototype = {
+  supportedMethods: string[];
+  supportedDataTypes?: string[];
+  init: (...args: never[]) => void | Promise<void>;
+};
+type EndpointConstructor = { (): void; prototype: EndpointPrototype };
+
+let AttachEndpoint: EndpointConstructor | undefined;
+let WriteEndpoint: EndpointConstructor | undefined;
+let VersionEndpoint: EndpointConstructor | undefined;
 
 let PLUGIN_VERSION = "3.2.0-dev";
 let FULLTEXT_ATTACH_PATH = "/attach";
@@ -36,7 +70,6 @@ type RequestData = Record<string, unknown>;
 type SendResponse = (status: number, contentType: string, body: string) => void;
 type JsonPayload = Record<string, unknown>;
 type TagEntry = { tag: string; type: number };
-type Relations = Record<string, string | string[]>;
 type Identifier = Record<string, string>;
 type ImportTranslator = {
   setTranslator(translatorId: string): void;
@@ -186,10 +219,13 @@ async function getUserCollectionOrThrow(collectionKey: string) {
 }
 
 function collectionDetails(collection: Zotero.Collection): JsonPayload {
+  // parentKey is the documented `false` sentinel when the collection has no parent;
+  // zotero-types models only the `string` case, so read through the real runtime type.
+  let parentKey = (collection as { parentKey: string | false }).parentKey;
   return {
     collection_key: collection.key,
     collection_name: collection.name,
-    parent_key: collection.parentKey || null,
+    parent_key: parentKey === false ? null : parentKey,
   };
 }
 
@@ -236,7 +272,10 @@ function isMissingFileError(error: unknown): boolean {
 
 async function materializeUploadBytes(fileName: string, fileBytesBase64: string) {
   let tempDir = Zotero.getTempDirectory();
-  let safeFileName = Zotero.File.getValidFileName(fileName.trim()) || "attachment.bin";
+  let safeFileName = Zotero.File.getValidFileName(fileName.trim());
+  if (!safeFileName) {
+    throw new Error("File name has no valid characters: " + fileName);
+  }
   tempDir.append(
     `local-write-api-${Date.now()}-${Math.random().toString(16).slice(2)}-${safeFileName}`,
   );
@@ -317,8 +356,7 @@ async function handleFulltextAttach(data: RequestData) {
         if (!fileBytesBase64 || !isMissingFileError(error)) {
           throw error;
         }
-        let fallbackName =
-          fileName || Zotero.File.pathToFile(filePath).leafName || "attachment.bin";
+        let fallbackName = fileName || Zotero.File.pathToFile(filePath).leafName;
         tempPath = await materializeUploadBytes(fallbackName, fileBytesBase64);
         attachment = await importStoredAttachment(parentItem, tempPath, title);
         sourceMode = "bytes_fallback";
@@ -381,7 +419,7 @@ async function handleReplaceItemJSON(data: RequestData) {
   await item.saveTx();
   return successResult("replace_item_json", {
     item_key: itemKey,
-    item_type: itemJSON.itemType || null,
+    item_type: item.itemType,
   });
 }
 
@@ -419,8 +457,7 @@ async function handleAttachNote(data: RequestData) {
   let parentItem = await getUserItemOrThrow(parentItemKey);
 
   let noteItem = new Zotero.Item("note");
-  // libraryID is readonly in zotero-types but writable on unsaved items
-  (noteItem as unknown as { libraryID: number }).libraryID = parentItem.libraryID;
+  noteItem.libraryID = parentItem.libraryID;
   noteItem.parentID = parentItem.id;
   noteItem.setNote(noteText);
   await noteItem.saveTx();
@@ -451,7 +488,8 @@ async function handleUpdateNote(data: RequestData) {
 
   return successResult("update_note", {
     note_key: noteKey,
-    parent_item_key: noteItem.parentKey || null,
+    // parentKey is `false`/undefined for a top-level note with no parent item.
+    parent_item_key: noteItem.parentKey ? noteItem.parentKey : null,
     content_length: newContent.length,
   });
 }
@@ -473,7 +511,8 @@ async function handleAttachURL(data: RequestData) {
     {
       parent_item_key: parentItemKey,
       url: url,
-      title: title || attachment.getField("title"),
+      // Report the requested title, or the title Zotero auto-assigned when none was given.
+      title: title ?? attachment.getField("title"),
     },
     {
       attachment_key: attachment.key,
@@ -489,7 +528,7 @@ async function handleTrashItem(data: RequestData) {
   await item.saveTx();
   return successResult("trash_item", {
     item_key: itemKey,
-    item_type: item.itemType || item.itemTypeID || null,
+    item_type: item.itemType,
   });
 }
 
@@ -550,8 +589,7 @@ async function handleMoveCollection(data: RequestData) {
     newParentKey = data.new_parent_key.trim();
     await getUserCollectionOrThrow(newParentKey);
   }
-  // zotero-types types parentKey as string but Zotero accepts false to remove a parent
-  (collection as unknown as { parentKey: string | false }).parentKey = newParentKey ?? false;
+  setCollectionParentKey(collection, newParentKey ?? false);
   await collection.saveTx();
 
   return successResult("move_collection", collectionDetails(collection));
@@ -639,8 +677,7 @@ async function handleDeleteTag(data: RequestData) {
 
   // Remove the tag from every item that carries it before removing it from the
   // library, and report how many items changed.
-  let search = new Zotero.Search();
-  (search as unknown as { libraryID: number }).libraryID = userLibraryID();
+  let search = new Zotero.Search({ libraryID: userLibraryID() });
   search.addCondition("tag", "is", tagName);
   let itemIDs = await search.search();
 
@@ -655,12 +692,7 @@ async function handleDeleteTag(data: RequestData) {
     }
   }
 
-  await Zotero.Tags.removeFromLibrary(
-    userLibraryID(),
-    [tagID],
-    () => {},
-    undefined as unknown as number[],
-  );
+  await Zotero.Tags.removeFromLibrary(userLibraryID(), [tagID]);
 
   return successResult("delete_tag", {
     tag_name: tagName,
@@ -757,17 +789,11 @@ async function handleMergeItems(data: RequestData) {
   }
   targetItem.setTags(targetTags);
 
-  let sourceRelations = sourceItem.getRelations() as unknown as Relations;
-  let targetRelations = targetItem.getRelations() as unknown as Relations;
-  for (let predicate of Object.keys(sourceRelations)) {
-    let rawSource = sourceRelations[predicate];
-    let sourceValues: string[] = Array.isArray(rawSource) ? rawSource : [rawSource];
-    let rawTarget = targetRelations[predicate];
-    let targetValues: string[] = rawTarget
-      ? Array.isArray(rawTarget)
-        ? rawTarget
-        : [rawTarget]
-      : [];
+  let sourceRelations = sourceItem.getRelations();
+  let targetRelations = targetItem.getRelations();
+  for (let [predicate, sourceValues] of Object.entries(sourceRelations)) {
+    let key = predicate as _ZoteroTypes.RelationsPredicate;
+    let targetValues = targetRelations[key] ? [...targetRelations[key]] : [];
     let targetValueSet = new Set(targetValues);
     for (let value of sourceValues) {
       if (!targetValueSet.has(value)) {
@@ -776,7 +802,7 @@ async function handleMergeItems(data: RequestData) {
         transferred.relations++;
       }
     }
-    targetItem.setRelations({ ...targetRelations, [predicate]: targetValues } as any);
+    targetItem.setRelations({ ...targetRelations, [key]: targetValues });
     targetRelations = targetItem.getRelations();
   }
   await targetItem.saveTx();
@@ -814,10 +840,13 @@ async function handleCreateItem(data: RequestData) {
     await getUserCollectionOrThrow(collectionKey);
   }
 
-  // itemType is user-supplied and validated at runtime
-  let item = new Zotero.Item(itemType as any);
-  // libraryID is readonly in zotero-types but writable on unsaved items
-  (item as unknown as { libraryID: number }).libraryID = userLibraryID();
+  // itemType is a user-supplied item-type name; Zotero validates it at runtime and
+  // throws on an unknown type. The constructor types the name as a literal union, so
+  // narrow the runtime string to that union (a no-op at runtime).
+  let item = new Zotero.Item(
+    itemType as _ZoteroTypes.Item.ItemTypeMapping[keyof _ZoteroTypes.Item.ItemTypeMapping],
+  );
+  item.libraryID = userLibraryID();
 
   let json = item.toJSON();
   Object.assign(json, fields);
@@ -1072,7 +1101,7 @@ async function handleRestoreItem(data: RequestData) {
   await item.saveTx();
   return successResult("restore_item", {
     item_key: itemKey,
-    item_type: item.itemType || item.itemTypeID || null,
+    item_type: item.itemType,
   });
 }
 
@@ -1093,18 +1122,13 @@ async function handleUpdateAttachmentTitle(data: RequestData) {
 
 async function handleSync(data: RequestData) {
   void data;
-  let runner = (Zotero as any).Sync && (Zotero as any).Sync.Runner;
+  let runner = Zotero.Sync && Zotero.Sync.Runner;
   if (!runner || typeof runner.sync !== "function") {
     throw new Error("Zotero.Sync.Runner.sync is unavailable");
   }
   // Foreground sync so the call resolves once the sync engine has run.
   let result = await runner.sync({ background: false });
-  let serialized: unknown;
-  try {
-    serialized = JSON.parse(JSON.stringify(result ?? null));
-  } catch {
-    serialized = String(result);
-  }
+  let serialized = JSON.parse(JSON.stringify(result));
   return successResult("sync", { triggered: true, result: serialized });
 }
 
@@ -1117,12 +1141,7 @@ async function handleRunJavascript(data: RequestData) {
   ) => (zotero: typeof Zotero) => Promise<unknown>;
   let fn = new AsyncFunction("Zotero", code);
   let result = await fn(Zotero);
-  let serialized: unknown;
-  try {
-    serialized = JSON.parse(JSON.stringify(result ?? null));
-  } catch {
-    serialized = String(result);
-  }
+  let serialized = JSON.parse(JSON.stringify(result));
   return successResult("run_javascript", { result: serialized });
 }
 
