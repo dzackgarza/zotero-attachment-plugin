@@ -4,13 +4,16 @@ This directory contains standalone examples demonstrating how combining Zotero's
 
 ## Prerequisites
 
-Most examples use external libraries.
-Install them via:
+Each script is a self-contained [PEP 723](https://peps.python.org/pep-0723/) `uv`
+script: its dependencies are declared in the script header and provisioned automatically.
+Run any example directly with `uv`:
+
 ```bash
-pip install -r requirements.txt
+uv run live_smoke.py
 ```
 
-Ensure your Zotero is running with the `zotero-local-write-api` extension installed.
+No separate install step is needed. Ensure your Zotero is running with the
+`zotero-local-write-api` extension installed.
 
 ## Scripts
 
@@ -29,8 +32,8 @@ Run it against a real Zotero with the current working-tree XPI installed before 
 
 **Usage:**
 ```bash
-python live_smoke.py
-python live_smoke.py --expected-version 3.2.3
+uv run live_smoke.py
+uv run live_smoke.py --expected-version 3.2.3
 ```
 
 ### 2. `find_item_by_bibtex.py`
@@ -40,8 +43,8 @@ It falls back to searching the entire library if not found in recent items.
 
 **Usage:**
 ```bash
-python find_item_by_bibtex.py [citation_key]
-python find_item_by_bibtex.py Ale22
+uv run find_item_by_bibtex.py [citation_key]
+uv run find_item_by_bibtex.py Ale22
 ```
 
 ### 3. `offline_pipeline.py`
@@ -55,6 +58,6 @@ A complete offline document processing pipeline that:
 
 **Usage:**
 ```bash
-python offline_pipeline.py
+uv run offline_pipeline.py
 ```
 *(Note: Downloading the sentence-transformers model takes a moment on the first run.)*

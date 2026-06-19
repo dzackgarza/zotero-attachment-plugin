@@ -1,4 +1,8 @@
-#!/usr/bin/env python3
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.11"
+# dependencies = []
+# ///
 """
 Live smoke proof for the local-write-api add-on.
 
@@ -71,9 +75,9 @@ def _require(condition: bool, message: str) -> None:
 
 def _tag_names(item: dict[str, Any]) -> list[str]:
     return [
-        tag.get("tag", "").strip()
-        for tag in item.get("data", {}).get("tags", [])
-        if isinstance(tag, dict) and tag.get("tag", "").strip()
+        tag["tag"].strip()
+        for tag in item["data"]["tags"]
+        if tag["tag"].strip()
     ]
 
 
@@ -105,7 +109,7 @@ def _wait_for_deleted(base_url: str, library_id: str, item_key: str, *, timeout:
     deadline = time.monotonic() + timeout
     while True:
         item = _get_item(base_url, library_id, item_key)
-        if bool(item.get("data", {}).get("deleted")):
+        if bool(item["data"].get("deleted")):
             return item
         if time.monotonic() >= deadline:
             return item
@@ -183,7 +187,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         _require(isinstance(item_key, str) and item_key, f"create_item did not return item_key: {create_result!r}")
 
         created_item = _get_item(base_url, library_id, item_key)
-        _require(created_item.get("data", {}).get("title") == f"live-smoke-item-{suffix}", f"Unexpected item title: {created_item!r}")
+        _require(created_item["data"]["title"] == f"live-smoke-item-{suffix}", f"Unexpected item title: {created_item!r}")
         created_tags = set(_tag_names(created_item))
         _require(created_tags == {doomed_tag, keep_tag}, f"Unexpected initial tags: {created_tags!r}")
 
@@ -208,7 +212,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         _require(isinstance(bibtex_item_key, str) and bibtex_item_key, f"import_bibtex did not return item_key: {bibtex_result!r}")
         bibtex_item = _get_item(base_url, library_id, bibtex_item_key)
         _require(
-            bibtex_item.get("data", {}).get("title") == bibtex_title,
+            bibtex_item["data"]["title"] == bibtex_title,
             f"import_bibtex read-back title mismatch: {bibtex_item!r}",
         )
 
@@ -232,11 +236,11 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         matching_attachment = next((child for child in children if child.get("key") == attachment_key), None)
         _require(matching_attachment is not None, f"Attached PDF {attachment_key} not found in children: {children!r}")
         _require(
-            matching_attachment.get("data", {}).get("contentType") == "application/pdf",
+            matching_attachment["data"]["contentType"] == "application/pdf",
             f"Attachment contentType mismatch: {matching_attachment!r}",
         )
         _require(
-            matching_attachment.get("data", {}).get("title") == "Live Smoke PDF",
+            matching_attachment["data"]["title"] == "Live Smoke PDF",
             f"Attachment title mismatch: {matching_attachment!r}",
         )
 
@@ -261,7 +265,7 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
 
         trashed_item = _wait_for_deleted(base_url, library_id, item_key)
         _require(
-            bool(trashed_item.get("data", {}).get("deleted")) is True,
+            bool(trashed_item["data"].get("deleted")) is True,
             f"trash_item did not mark the item deleted: {trashed_item!r}",
         )
 
