@@ -1,5 +1,19 @@
 # AGENTS.md
 
+## OpenAPI Contract
+
+[`openapi.yaml`](./openapi.yaml): single source of truth for all request/response shapes.
+README don't duplicate schemas, only link to `openapi.yaml`.
+
+Change in `src/bootstrap.ts` to `runWrite`'s `operation` switch, handler's required/optional fields, or response payload fields → matching `openapi.yaml` edit, same diff (new/changed operation schema, updated `mapping` + `oneOf` entries in `WriteRequest`, updated `VersionResponse`/`AttachSuccessResponse` as needed).
+No new/changed `case` in `runWrite`, or field read via `data.<field>`, without matching `openapi.yaml` update same diff.
+
+Validate before commit:
+
+```bash
+npx --yes @redocly/cli lint openapi.yaml
+```
+
 ## Local Zotero Runtime Proof
 
 This repo is a Zotero add-on.

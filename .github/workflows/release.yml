@@ -24,6 +24,9 @@ jobs:
           pip install pyyaml
           bun install
 
+      - name: Lint OpenAPI spec
+        run: npx --yes @redocly/cli lint openapi.yaml
+
       - name: Build XPI
         run: python3 build.py
 
