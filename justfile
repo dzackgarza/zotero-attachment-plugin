@@ -1,10 +1,14 @@
 qc-type := "bun"
 
-# Run the full local QC contract
-test:
-    @just -f ~/ai-review-ci/justfiles/bun.just -d . test
+# Run immediate commit-tier QC
+test-commit:
+    @just -f ~/ai-review-ci/justfiles/bun.just -d . test-commit
 
-# Run the full CI QC contract
+# Run the full project suite before pushing
+test-push:
+    @just -f ~/ai-review-ci/justfiles/bun.just -d . test-push
+
+# Run CI acceptance QC
 test-ci:
     @just -f ~/ai-review-ci/justfiles/bun.just -d . test-ci
 
