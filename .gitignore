@@ -9,6 +9,7 @@ lcov.info
 tsconfig.tsbuildinfo
 src/bootstrap.js
 src/manifest.json
-.grepai/
-.claude/
-.devcontainer/
+.hypothesis/
+schemathesis-report/
+*.har
+junit-*.xml

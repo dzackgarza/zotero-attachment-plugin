@@ -1,5 +1,14 @@
 qc-type := "bun"
 
+# ai-review-ci contract variables consumed by doctor and workflow installers.
+ai_review_ci_schema_version := "1"
+ai_review_ci_profile := "bun"
+ai_review_ci_ref := "main"
+ai_review_ci_release_channel := "main"
+ai_review_ci_workflow_template_version := "1"
+ai_review_ci_local_delegation := "global-justfile"
+ai_review_ci_default_branch := "main"
+
 # Run immediate commit-tier QC
 test-commit:
     @just -f ~/ai-review-ci/justfiles/bun.just -d . test-commit
