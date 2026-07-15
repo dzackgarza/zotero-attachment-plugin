@@ -23,10 +23,14 @@ function removeTagsFromUserLibrary(
   tagIDs: number[],
 ): Promise<void> {
   let remove = Zotero.Tags.removeFromLibrary as (
+    this: typeof Zotero.Tags,
     libraryID: number,
     tagIDs: number[],
   ) => Promise<void>;
-  return remove(libraryID, tagIDs);
+  // Call through Zotero.Tags: removeFromLibrary uses `this` internally (it
+  // reaches this.getColors), so invoking the extracted reference unbound throws
+  // "this.getColors is not a function" at runtime.
+  return remove.call(Zotero.Tags, libraryID, tagIDs);
 }
 
 // Zotero.Search is under-modeled in zotero-types for the addCondition/search API.

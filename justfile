@@ -53,6 +53,68 @@ smoke-live:
     fi
     python3 examples/live_smoke.py "${args[@]}"
 
+# Build the working-tree XPI and hot-install it into the active Zotero profile,
+# then restart Zotero with a cache purge so the current code is actually loaded.
+# This REPLACES the running add-on and RESTARTS your Zotero (closing the current
+# session). updates.json is a release channel, not a reliable local same-version
+# reload, so the proven local path is replace-profile-XPI + restart (AGENTS.md).
+install-live:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    version="$(cat VERSION)"
+    xpi="local-write-api-${version}.xpi"
+
+    # 1. Build from the working tree.
+    python3 build.py
+    test -f "$xpi" || { echo "expected $xpi was not built" >&2; exit 1; }
+
+    # 2. Discover the active (Default=1) profile from profiles.ini.
+    ini="$HOME/.zotero/zotero/profiles.ini"
+    profile="$(awk -F= '/^\[/{p=""} /^Path=/{p=$2} /^Default=1/{print p}' "$ini")"
+    test -n "$profile" || { echo "no Default profile in $ini" >&2; exit 1; }
+    ext_dir="$HOME/.zotero/zotero/${profile}/extensions"
+    installed="${ext_dir}/local-write-api@dzackgarza.com.xpi"
+
+    # 3. Timestamped backup of the currently installed XPI.
+    if [[ -f "$installed" ]]; then
+        cp -p "$installed" "${installed}.bak.$(date +%Y%m%d-%H%M%S)"
+    fi
+
+    # 4. Install and verify the installed bytes match the build exactly. A
+    #    matching version string is NOT proof when rebuilding the same version.
+    mkdir -p "$ext_dir"
+    cp "$xpi" "$installed"
+    if [[ "$(sha256sum "$xpi" | cut -d' ' -f1)" != "$(sha256sum "$installed" | cut -d' ' -f1)" ]]; then
+        echo "sha256 mismatch after install" >&2
+        exit 1
+    fi
+    echo "installed $xpi -> $installed"
+
+    # 5. Restart Zotero with cache purge. Stop by exact process name (-x), never
+    #    pkill -f, whose pattern would match this recipe's own shell (AGENTS.md).
+    pkill -x zotero-bin || true
+    pkill -x zotero || true
+    sleep 3
+    setsid env \
+        DISPLAY="${DISPLAY:-:0}" \
+        WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}" \
+        XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" \
+        DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/$(id -u)/bus}" \
+        zotero -purgecaches >/tmp/zotero-local-write-api-zotero.log 2>&1 < /dev/null &
+
+    # 6. Wait for the add-on to answer with the just-built version.
+    base="${ZOTERO_LOCAL_BASE_URL:-http://127.0.0.1:23119}"
+    for _ in $(seq 1 60); do
+        got="$(curl -fsS "$base/version" 2>/dev/null | python3 -c 'import sys,json; print(json.load(sys.stdin).get("version",""))' 2>/dev/null || true)"
+        if [[ "$got" == "$version" ]]; then
+            echo "Zotero up with version $version — run 'EXPECTED_VERSION=$version just smoke-live' to prove behavior"
+            exit 0
+        fi
+        sleep 2
+    done
+    echo "Zotero did not report version $version within timeout; see /tmp/zotero-local-write-api-zotero.log" >&2
+    exit 1
+
 # Static OpenAPI contract check (lint + generated-drift + dispatch conformance)
 openapi-check:
     bun run openapi:check
