@@ -284,7 +284,13 @@ function normalizeStringList(value: unknown, fieldName: string): string[] {
     if (typeof entry !== "string") {
       throw badRequest(fieldName + " entries must be strings");
     }
-    let cleaned = entry.trim();
+    // NFC before trim/dedupe: Zotero normalizes text when it stores it, so raw
+    // caller input must be normalized to the same form or it silently fails to
+    // match what is stored. Without this, add_item_tags(X) followed by
+    // remove_item_tags(X) with the identical string X is a no-op that still
+    // reports success (removed_count: 0), and the dedupe below counts "e" +
+    // U+0301 and U+00E9 as two different tags when Zotero stores one.
+    let cleaned = entry.normalize("NFC").trim();
     if (!cleaned || seen.has(cleaned)) {
       continue;
     }
@@ -811,7 +817,10 @@ async function handleMergeTags(data: RequestData) {
 }
 
 async function handleDeleteTag(data: RequestData) {
-  let tagName = requireNonEmptyString(data.tag_name, "tag_name");
+  // NFC for the same reason as normalizeStringList: Zotero stores the
+  // normalized form, so a non-NFC tag_name would miss getID and 404 on a tag
+  // that does exist.
+  let tagName = requireNonEmptyString(data.tag_name, "tag_name").normalize("NFC");
   let tagID = Zotero.Tags.getID(tagName);
   if (!tagID) {
     throw notFound("Tag not found: " + tagName);
