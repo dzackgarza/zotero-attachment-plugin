@@ -1,0 +1,5 @@
+# Custom labels for the self-hosted runner that owns the disposable Zotero
+# profile used by .github/workflows/live.yml.
+self-hosted-runner:
+  labels:
+    - zotero-disposable

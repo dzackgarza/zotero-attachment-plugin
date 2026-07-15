@@ -1,0 +1,128 @@
+name: Live Zotero proof
+
+# Mutating proof against a real Zotero. This runs on a self-hosted runner that
+# owns a DISPOSABLE Zotero profile containing no user data.
+#
+# Security: never use pull_request_target here. That would check out and execute
+# untrusted fork code on a self-hosted workstation. Fork contributions are proven
+# by dispatching this workflow against an explicitly reviewed commit SHA, behind
+# an environment that requires approval.
+#
+# Runner prerequisites (provided by the machine, not installed per-run):
+#   - zotero, just, and uv on PATH
+#   - a disposable Zotero profile with no user data
+#   - env: ZOTERO_PROFILE_DIR, ZOTERO_DISPOSABLE_PROFILE, ZOTERO_RESET_PROFILE_CMD
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Reviewed commit SHA to build and prove
+        required: true
+        type: string
+
+# One live job at a time: all scenarios share a single Zotero process.
+concurrency:
+  group: live-zotero
+  cancel-in-progress: false
+
+jobs:
+  live:
+    name: Live proof (disposable profile)
+    runs-on: [self-hosted, zotero-disposable]
+    environment: zotero-live
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          ref: ${{ inputs.sha }}
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies (frozen)
+        run: |
+          bun install --frozen-lockfile
+          pip install pyyaml
+          uv sync --frozen
+
+      - name: Build XPI from the checked-out SHA
+        run: |
+          python3 build.py
+          echo "VERSION=$(cat VERSION)" >> "$GITHUB_ENV"
+
+      # ZOTERO_PROFILE_DIR and ZOTERO_DISPOSABLE_PROFILE are provided by the
+      # runner and must point at the throwaway profile, never a real library.
+      - name: Install the built XPI into the disposable profile
+        run: |
+          xpi="local-write-api-${VERSION}.xpi"
+          ext_dir="${ZOTERO_PROFILE_DIR}/extensions"
+          mkdir -p "$ext_dir"
+          installed="${ext_dir}/local-write-api@dzackgarza.com.xpi"
+          cp "$xpi" "$installed"
+          built=$(sha256sum "$xpi" | cut -d' ' -f1)
+          live=$(sha256sum "$installed" | cut -d' ' -f1)
+          echo "built=$built installed=$live"
+          # A matching version string is NOT proof the current code is loaded;
+          # only identical bytes are.
+          test "$built" = "$live"
+
+      - name: Restart Zotero with cache purge
+        run: |
+          pkill -x zotero-bin || true
+          pkill -x zotero || true
+          sleep 3
+          setsid env \
+            DISPLAY="${DISPLAY:-:0}" \
+            XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" \
+            zotero -P "${ZOTERO_DISPOSABLE_PROFILE}" -purgecaches \
+            >"${RUNNER_TEMP}/zotero.log" 2>&1 < /dev/null &
+
+      - name: Wait for the add-on and require the built version + capabilities
+        run: |
+          base="${ZOTERO_LOCAL_BASE_URL:-http://127.0.0.1:23119}"
+          for _ in $(seq 1 60); do
+            if curl -fsS "$base/version" -o /tmp/version.json 2>/dev/null; then
+              python3 - <<'PY' && exit 0
+          import json, os, sys
+          v = json.load(open("/tmp/version.json"))
+          assert v.get("version") == os.environ["VERSION"], v
+          caps = set(v.get("capabilities") or [])
+          required = {"attach", "attach_bytes", "write", "version_probe", "import_bibtex"}
+          assert required <= caps, f"missing capabilities: {required - caps}"
+          PY
+            fi
+            sleep 2
+          done
+          echo "Zotero did not come up with version ${VERSION}" >&2
+          exit 1
+
+      - name: Smoke proof
+        run: EXPECTED_VERSION=${VERSION} just smoke-live
+
+      - name: Generic Schemathesis fuzz
+        run: just schemathesis-fuzz-live
+
+      - name: Stateful workflow proof
+        run: just schemathesis-stateful-live
+
+      - name: Upload artifacts
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: live-proof-artifacts
+          path: |
+            schemathesis-report/
+            local-write-api-*.xpi
+            ${{ runner.temp }}/zotero.log
+          if-no-files-found: ignore
+
+      # The disposable profile accumulates objects from generated positive cases.
+      # Resetting it is what makes generated mutation acceptable at all.
+      - name: Reset the disposable profile
+        if: always()
+        run: |
+          pkill -x zotero-bin || true
+          pkill -x zotero || true
+          "${ZOTERO_RESET_PROFILE_CMD:?runner must provide a profile reset command}"
