@@ -26,14 +26,40 @@ function parseBootstrap(): ts.SourceFile {
   );
 }
 
-function parseOpenAPI(): any {
-  const source = fs.readFileSync(OPENAPI_PATH, "utf8");
-  return yaml.load(source);
+// Minimal structural view of the parts of the spec these tests navigate.
+// The YAML is dynamic, but every access below is covered by this shape.
+// Fields are declared required: this is the shape each test asserts the spec
+// has. If a field is actually absent, the navigation throws at runtime, which
+// is the failure the test is meant to surface.
+interface SchemaNode {
+  $ref: string;
+  const: string;
+  required: string[];
+  oneOf: SchemaNode[];
+  allOf: SchemaNode[];
+  properties: Record<string, SchemaNode>;
+  discriminator: { mapping: Record<string, string> };
 }
 
-function parseConfig(): any {
+interface OpenAPIDoc {
+  info: { version: string };
+  servers: { url: string }[];
+  paths: Record<string, unknown>;
+  components: { schemas: Record<string, SchemaNode> };
+}
+
+interface ConfigDoc {
+  endpoints: Record<string, string>;
+}
+
+function parseOpenAPI(): OpenAPIDoc {
+  const source = fs.readFileSync(OPENAPI_PATH, "utf8");
+  return yaml.load(source) as OpenAPIDoc;
+}
+
+function parseConfig(): ConfigDoc {
   const source = fs.readFileSync(CONFIG_PATH, "utf8");
-  return yaml.load(source);
+  return yaml.load(source) as ConfigDoc;
 }
 
 // Find the runWrite function and its switch statement
@@ -206,9 +232,7 @@ describe("OpenAPI contract conformance", () => {
 
   it("switch cases match WriteRequest oneOf refs", () => {
     const writeReq = spec.components.schemas.WriteRequest;
-    const oneOfRefs = writeReq.oneOf.map((s: any) =>
-      s["$ref"].split("/").pop(),
-    );
+    const oneOfRefs = writeReq.oneOf.map((s) => s.$ref.split("/").pop()!);
     expect(oneOfRefs.length).toBe(32);
     // Each ref should point to a schema whose operation const matches a runtime op
     for (const ref of oneOfRefs) {
@@ -227,9 +251,7 @@ describe("OpenAPI contract conformance", () => {
 
   it("switch cases match WriteSuccessResponse oneOf refs", () => {
     const writeSuccess = spec.components.schemas.WriteSuccessResponse;
-    const oneOfRefs = writeSuccess.oneOf.map((s: any) =>
-      s["$ref"].split("/").pop(),
-    );
+    const oneOfRefs = writeSuccess.oneOf.map((s) => s.$ref.split("/").pop()!);
     expect(oneOfRefs.length).toBe(32);
     for (const ref of oneOfRefs) {
       const schema = spec.components.schemas[ref];
@@ -262,10 +284,10 @@ describe("OpenAPI contract conformance", () => {
       expect(schema).toBeDefined();
       // The operation const is nested in the allOf composition
       const composition = schema.allOf.find(
-        (s: any) => s.properties?.operation?.const !== undefined,
+        (s) => s.properties?.operation?.const !== undefined,
       );
       expect(composition).toBeDefined();
-      return composition.properties.operation.const;
+      return composition!.properties.operation.const;
     });
     expect(new Set(successSchemas)).toEqual(new Set(runtimeOps));
   });
