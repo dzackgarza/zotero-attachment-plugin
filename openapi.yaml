@@ -179,8 +179,11 @@ components:
             - request
           properties:
             request:
-              type: object
-              additionalProperties: true
+              description: >
+                The request body exactly as received, echoed back for
+                diagnostics. Usually an object, but a malformed body is echoed
+                as-is (a JSON null, array, or scalar) alongside the 400 that
+                rejects it, so this is deliberately not constrained to an object.
         version:
           type: string
 
@@ -292,8 +295,14 @@ components:
         file_name:
           $ref: '#/components/schemas/NonBlankString'
         file_bytes_base64:
-          type: string
+          allOf:
+            - $ref: "#/components/schemas/NonBlankString"
           contentEncoding: base64
+          description: >
+            Base64-encoded file bytes. Must be non-blank: the endpoint reads it
+            with the same trim-to-null rule as the other optional strings, so a
+            blank value counts as absent and fails the anyOf below rather than
+            being accepted as bytes.
       allOf:
         - description: >
             Either file_path is present, or both file_name and file_bytes_base64

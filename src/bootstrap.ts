@@ -114,6 +114,16 @@ function isApiError(error: unknown): error is ApiError {
   return error instanceof ApiError;
 }
 
+// Zotero hands the endpoint whatever JSON the client sent, including `null`,
+// arrays, and scalars. Dereferencing those throws a raw TypeError instead of a
+// classified failure, so every endpoint narrows the body here first.
+function requireRequestObject(data: unknown): RequestData {
+  if (data === null || typeof data !== "object" || Array.isArray(data)) {
+    throw badRequest("Request body must be a JSON object");
+  }
+  return data as RequestData;
+}
+
 // A Zotero HTTP endpoint is registered as a constructor function whose prototype carries
 // the request metadata and init handler. The slot is cleared to undefined on shutdown.
 type EndpointPrototype = {
@@ -983,6 +993,12 @@ async function handleMergeItems(data: RequestData) {
 
 async function handleCreateItem(data: RequestData) {
   let itemType = requireNonEmptyString(data.item_type, "item_type");
+  // A syntactically fine string is not necessarily a Zotero item type. Without
+  // this, an unknown type reaches Zotero and surfaces as an unclassified 500
+  // ("Invalid item type id 'false'") rather than a 400 naming the bad input.
+  if (!Zotero.ItemTypes.getID(itemType)) {
+    throw badRequest("Invalid item_type: " + itemType);
+  }
   let fields = data.fields ? requireObject(data.fields, "fields") : {};
   let tags = data.tags ? normalizeStringList(data.tags, "tags") : [];
   let collectionKeys = data.collection_keys
@@ -1426,7 +1442,11 @@ async function startup({
             PLUGIN_VERSION +
             "]",
         );
-        sendJSON(sendResponse, 200, await handleFulltextAttach(data));
+        sendJSON(
+          sendResponse,
+          200,
+          await handleFulltextAttach(requireRequestObject(data)),
+        );
       } catch (error) {
         let msg = (error as Error).message;
         let status = isApiError(error) ? error.status : 500;
@@ -1456,11 +1476,15 @@ async function startup({
     init: async function (data: RequestData, sendResponse: SendResponse) {
       // operation may be absent on a malformed request; label it explicitly for
       // diagnostics. This is the error-rendering boundary, not a runtime default.
-      let operationLabel =
-        typeof data.operation === "string"
-          ? data.operation
-          : "unknown_operation";
+      // It is computed inside the try: reading data.operation on a null body
+      // throws, and doing that outside the try left sendResponse uncalled, which
+      // hung the request forever instead of answering 400.
+      let operationLabel = "unknown_operation";
       try {
+        let body = requireRequestObject(data);
+        if (typeof body.operation === "string") {
+          operationLabel = body.operation;
+        }
         log(
           "Received POST request to " +
             LOCAL_WRITE_PATH +
@@ -1468,7 +1492,7 @@ async function startup({
             operationLabel +
             "]",
         );
-        sendJSON(sendResponse, 200, await runWrite(data));
+        sendJSON(sendResponse, 200, await runWrite(body));
       } catch (error) {
         let msg = (error as Error).message;
         let status = isApiError(error) ? error.status : 500;

@@ -83,9 +83,8 @@ export interface components {
             stage: string;
             error: string;
             details: {
-                request: {
-                    [key: string]: unknown;
-                };
+                /** @description The request body exactly as received, echoed back for diagnostics. Usually an object, but a malformed body is echoed as-is (a JSON null, array, or scalar) alongside the 400 that rejects it, so this is deliberately not constrained to an object. */
+                request: unknown;
             };
             version: string;
         };
@@ -123,7 +122,8 @@ export interface components {
             title: components["schemas"]["NonBlankString"];
             file_path?: components["schemas"]["NonBlankString"];
             file_name?: components["schemas"]["NonBlankString"];
-            file_bytes_base64?: string;
+            /** @description Base64-encoded file bytes. Must be non-blank: the endpoint reads it with the same trim-to-null rule as the other optional strings, so a blank value counts as absent and fails the anyOf below rather than being accepted as bytes. */
+            file_bytes_base64?: components["schemas"]["NonBlankString"];
         } & (unknown | unknown);
         AttachSuccessResponse: components["schemas"]["SuccessEnvelope"] & {
             attachment_key: string;
