@@ -8,8 +8,10 @@
     "lint": "eslint src/bootstrap.ts",
     "test": "bun test --coverage --coverage-reporter=lcov --coverage-dir=.",
     "openapi:lint": "redocly lint openapi.yaml",
+    "openapi:generate": "openapi-typescript openapi.yaml -o src/generated/openapi.ts",
+    "openapi:check-generated": "openapi-typescript openapi.yaml -o src/generated/openapi.ts --check",
     "openapi:contract": "bun test tests/openapi-contract.test.ts",
-    "openapi:check": "bun run openapi:lint && bun run openapi:contract"
+    "openapi:check": "bun run openapi:lint && bun run openapi:check-generated && bun run openapi:contract"
   },
   "devDependencies": {
     "@redocly/cli": "^2.39.0",
@@ -19,6 +21,8 @@
     "esbuild": "^0.27.3",
     "eslint": "^10.0.3",
     "js-yaml": "^5.2.1",
+    "openapi-fetch": "^0.17.0",
+    "openapi-typescript": "^7.13.0",
     "typescript": "^5.9.3",
     "zotero-types": "^4.1.2"
   }

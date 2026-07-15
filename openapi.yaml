@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: Zotero Local Write API
-  version: "3.3.1"
+  version: '3.3.1'
   description: >
     Zotero add-on that registers local HTTP write endpoints on Zotero's existing
     server. Zotero's built-in local API is read-only; this add-on adds item, note,
@@ -25,12 +25,12 @@ paths:
       operationId: getVersion
       summary: Health check and capability probe
       responses:
-        "200":
+        '200':
           description: Add-on is installed and running.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/VersionResponse"
+                $ref: '#/components/schemas/VersionResponse'
 
   /attach:
     post:
@@ -41,32 +41,32 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/AttachRequest"
+              $ref: '#/components/schemas/AttachRequest'
       responses:
-        "200":
+        '200':
           description: Attachment created.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/AttachSuccessResponse"
-        "400":
+                $ref: '#/components/schemas/AttachSuccessResponse'
+        '400':
           description: Malformed request, missing fields, invalid path or base64.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "404":
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
           description: Parent item or file not found.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "500":
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
           description: Unexpected server error.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: '#/components/schemas/ErrorResponse'
 
   /write:
     post:
@@ -77,38 +77,38 @@ paths:
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/WriteRequest"
+              $ref: '#/components/schemas/WriteRequest'
       responses:
-        "200":
+        '200':
           description: Operation completed successfully.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/WriteSuccessResponse"
-        "400":
+                $ref: '#/components/schemas/WriteSuccessResponse'
+        '400':
           description: Malformed request, missing fields, unsupported operation.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "404":
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
           description: Referenced item, note, attachment, collection, or tag not found.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "409":
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
           description: Request conflicts with current state (wrong item kind, source equals target, collection cycle).
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "500":
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
           description: Unexpected server error.
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ErrorResponse"
+                $ref: '#/components/schemas/ErrorResponse'
 
 components:
   schemas:
@@ -129,10 +129,10 @@ components:
         and de-duplicates.
 
     ItemKey:
-      $ref: "#/components/schemas/NonBlankString"
+      $ref: '#/components/schemas/NonBlankString'
 
     CollectionKey:
-      $ref: "#/components/schemas/NonBlankString"
+      $ref: '#/components/schemas/NonBlankString'
 
     SuccessEnvelope:
       type: object
@@ -153,6 +153,7 @@ components:
           type: string
         details:
           type: object
+          additionalProperties: true
 
     ErrorResponse:
       type: object
@@ -179,6 +180,7 @@ components:
           properties:
             request:
               type: object
+              additionalProperties: true
         version:
           type: string
 
@@ -196,7 +198,7 @@ components:
         parent_key:
           type:
             - string
-            - "null"
+            - 'null'
 
     # ── /version response ───────────────────────────────────────────
 
@@ -282,13 +284,13 @@ components:
         - title
       properties:
         item_key:
-          $ref: "#/components/schemas/ItemKey"
+          $ref: '#/components/schemas/ItemKey'
         title:
-          $ref: "#/components/schemas/NonBlankString"
+          $ref: '#/components/schemas/NonBlankString'
         file_path:
-          $ref: "#/components/schemas/NonBlankString"
+          $ref: '#/components/schemas/NonBlankString'
         file_name:
-          $ref: "#/components/schemas/NonBlankString"
+          $ref: '#/components/schemas/NonBlankString'
         file_bytes_base64:
           type: string
           contentEncoding: base64
@@ -309,7 +311,7 @@ components:
 
     AttachSuccessResponse:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           required:
             - attachment_key
@@ -338,7 +340,7 @@ components:
                 file_path:
                   type:
                     - string
-                    - "null"
+                    - 'null'
                 source_mode:
                   enum:
                     - path
@@ -352,73 +354,73 @@ components:
 
     WriteRequest:
       oneOf:
-        - $ref: "#/components/schemas/SyncRequest"
-        - $ref: "#/components/schemas/RunJavascriptRequest"
-        - $ref: "#/components/schemas/UpdateItemFieldsRequest"
-        - $ref: "#/components/schemas/ReplaceItemJsonRequest"
-        - $ref: "#/components/schemas/SetItemTagsRequest"
-        - $ref: "#/components/schemas/AddItemTagsRequest"
-        - $ref: "#/components/schemas/RemoveItemTagsRequest"
-        - $ref: "#/components/schemas/SetItemCollectionsRequest"
-        - $ref: "#/components/schemas/AddItemToCollectionRequest"
-        - $ref: "#/components/schemas/RemoveItemFromCollectionRequest"
-        - $ref: "#/components/schemas/AttachNoteRequest"
-        - $ref: "#/components/schemas/UpdateNoteRequest"
-        - $ref: "#/components/schemas/AttachUrlRequest"
-        - $ref: "#/components/schemas/TrashItemRequest"
-        - $ref: "#/components/schemas/TrashCollectionRequest"
-        - $ref: "#/components/schemas/RelinkAttachmentFileRequest"
-        - $ref: "#/components/schemas/CreateCollectionRequest"
-        - $ref: "#/components/schemas/RenameCollectionRequest"
-        - $ref: "#/components/schemas/MoveCollectionRequest"
-        - $ref: "#/components/schemas/MergeCollectionsRequest"
-        - $ref: "#/components/schemas/RenameTagRequest"
-        - $ref: "#/components/schemas/MergeTagsRequest"
-        - $ref: "#/components/schemas/DeleteTagRequest"
-        - $ref: "#/components/schemas/DeleteUnusedTagsRequest"
-        - $ref: "#/components/schemas/CopyItemRequest"
-        - $ref: "#/components/schemas/MergeItemsRequest"
-        - $ref: "#/components/schemas/CreateItemRequest"
-        - $ref: "#/components/schemas/ImportBibtexRequest"
-        - $ref: "#/components/schemas/ImportByIdentifierRequest"
-        - $ref: "#/components/schemas/GetSelectedCollectionRequest"
-        - $ref: "#/components/schemas/RestoreItemRequest"
-        - $ref: "#/components/schemas/UpdateAttachmentTitleRequest"
+        - $ref: '#/components/schemas/SyncRequest'
+        - $ref: '#/components/schemas/RunJavascriptRequest'
+        - $ref: '#/components/schemas/UpdateItemFieldsRequest'
+        - $ref: '#/components/schemas/ReplaceItemJsonRequest'
+        - $ref: '#/components/schemas/SetItemTagsRequest'
+        - $ref: '#/components/schemas/AddItemTagsRequest'
+        - $ref: '#/components/schemas/RemoveItemTagsRequest'
+        - $ref: '#/components/schemas/SetItemCollectionsRequest'
+        - $ref: '#/components/schemas/AddItemToCollectionRequest'
+        - $ref: '#/components/schemas/RemoveItemFromCollectionRequest'
+        - $ref: '#/components/schemas/AttachNoteRequest'
+        - $ref: '#/components/schemas/UpdateNoteRequest'
+        - $ref: '#/components/schemas/AttachUrlRequest'
+        - $ref: '#/components/schemas/TrashItemRequest'
+        - $ref: '#/components/schemas/TrashCollectionRequest'
+        - $ref: '#/components/schemas/RelinkAttachmentFileRequest'
+        - $ref: '#/components/schemas/CreateCollectionRequest'
+        - $ref: '#/components/schemas/RenameCollectionRequest'
+        - $ref: '#/components/schemas/MoveCollectionRequest'
+        - $ref: '#/components/schemas/MergeCollectionsRequest'
+        - $ref: '#/components/schemas/RenameTagRequest'
+        - $ref: '#/components/schemas/MergeTagsRequest'
+        - $ref: '#/components/schemas/DeleteTagRequest'
+        - $ref: '#/components/schemas/DeleteUnusedTagsRequest'
+        - $ref: '#/components/schemas/CopyItemRequest'
+        - $ref: '#/components/schemas/MergeItemsRequest'
+        - $ref: '#/components/schemas/CreateItemRequest'
+        - $ref: '#/components/schemas/ImportBibtexRequest'
+        - $ref: '#/components/schemas/ImportByIdentifierRequest'
+        - $ref: '#/components/schemas/GetSelectedCollectionRequest'
+        - $ref: '#/components/schemas/RestoreItemRequest'
+        - $ref: '#/components/schemas/UpdateAttachmentTitleRequest'
       discriminator:
         propertyName: operation
         mapping:
-          sync: "#/components/schemas/SyncRequest"
-          run_javascript: "#/components/schemas/RunJavascriptRequest"
-          update_item_fields: "#/components/schemas/UpdateItemFieldsRequest"
-          replace_item_json: "#/components/schemas/ReplaceItemJsonRequest"
-          set_item_tags: "#/components/schemas/SetItemTagsRequest"
-          add_item_tags: "#/components/schemas/AddItemTagsRequest"
-          remove_item_tags: "#/components/schemas/RemoveItemTagsRequest"
-          set_item_collections: "#/components/schemas/SetItemCollectionsRequest"
-          add_item_to_collection: "#/components/schemas/AddItemToCollectionRequest"
-          remove_item_from_collection: "#/components/schemas/RemoveItemFromCollectionRequest"
-          attach_note: "#/components/schemas/AttachNoteRequest"
-          update_note: "#/components/schemas/UpdateNoteRequest"
-          attach_url: "#/components/schemas/AttachUrlRequest"
-          trash_item: "#/components/schemas/TrashItemRequest"
-          trash_collection: "#/components/schemas/TrashCollectionRequest"
-          relink_attachment_file: "#/components/schemas/RelinkAttachmentFileRequest"
-          create_collection: "#/components/schemas/CreateCollectionRequest"
-          rename_collection: "#/components/schemas/RenameCollectionRequest"
-          move_collection: "#/components/schemas/MoveCollectionRequest"
-          merge_collections: "#/components/schemas/MergeCollectionsRequest"
-          rename_tag: "#/components/schemas/RenameTagRequest"
-          merge_tags: "#/components/schemas/MergeTagsRequest"
-          delete_tag: "#/components/schemas/DeleteTagRequest"
-          delete_unused_tags: "#/components/schemas/DeleteUnusedTagsRequest"
-          copy_item: "#/components/schemas/CopyItemRequest"
-          merge_items: "#/components/schemas/MergeItemsRequest"
-          create_item: "#/components/schemas/CreateItemRequest"
-          import_bibtex: "#/components/schemas/ImportBibtexRequest"
-          import_by_identifier: "#/components/schemas/ImportByIdentifierRequest"
-          get_selected_collection: "#/components/schemas/GetSelectedCollectionRequest"
-          restore_item: "#/components/schemas/RestoreItemRequest"
-          update_attachment_title: "#/components/schemas/UpdateAttachmentTitleRequest"
+          sync: '#/components/schemas/SyncRequest'
+          run_javascript: '#/components/schemas/RunJavascriptRequest'
+          update_item_fields: '#/components/schemas/UpdateItemFieldsRequest'
+          replace_item_json: '#/components/schemas/ReplaceItemJsonRequest'
+          set_item_tags: '#/components/schemas/SetItemTagsRequest'
+          add_item_tags: '#/components/schemas/AddItemTagsRequest'
+          remove_item_tags: '#/components/schemas/RemoveItemTagsRequest'
+          set_item_collections: '#/components/schemas/SetItemCollectionsRequest'
+          add_item_to_collection: '#/components/schemas/AddItemToCollectionRequest'
+          remove_item_from_collection: '#/components/schemas/RemoveItemFromCollectionRequest'
+          attach_note: '#/components/schemas/AttachNoteRequest'
+          update_note: '#/components/schemas/UpdateNoteRequest'
+          attach_url: '#/components/schemas/AttachUrlRequest'
+          trash_item: '#/components/schemas/TrashItemRequest'
+          trash_collection: '#/components/schemas/TrashCollectionRequest'
+          relink_attachment_file: '#/components/schemas/RelinkAttachmentFileRequest'
+          create_collection: '#/components/schemas/CreateCollectionRequest'
+          rename_collection: '#/components/schemas/RenameCollectionRequest'
+          move_collection: '#/components/schemas/MoveCollectionRequest'
+          merge_collections: '#/components/schemas/MergeCollectionsRequest'
+          rename_tag: '#/components/schemas/RenameTagRequest'
+          merge_tags: '#/components/schemas/MergeTagsRequest'
+          delete_tag: '#/components/schemas/DeleteTagRequest'
+          delete_unused_tags: '#/components/schemas/DeleteUnusedTagsRequest'
+          copy_item: '#/components/schemas/CopyItemRequest'
+          merge_items: '#/components/schemas/MergeItemsRequest'
+          create_item: '#/components/schemas/CreateItemRequest'
+          import_bibtex: '#/components/schemas/ImportBibtexRequest'
+          import_by_identifier: '#/components/schemas/ImportByIdentifierRequest'
+          get_selected_collection: '#/components/schemas/GetSelectedCollectionRequest'
+          restore_item: '#/components/schemas/RestoreItemRequest'
+          update_attachment_title: '#/components/schemas/UpdateAttachmentTitleRequest'
 
     # ── Request schemas (one per operation) ────────────────────────
 
@@ -458,9 +460,10 @@ components:
         operation:
           const: update_item_fields
         item_key:
-          $ref: "#/components/schemas/ItemKey"
+          $ref: '#/components/schemas/ItemKey'
         fields:
           type: object
+          additionalProperties: true
 
     ReplaceItemJsonRequest:
       type: object
@@ -472,9 +475,10 @@ components:
         operation:
           const: replace_item_json
         item_key:
-          $ref: "#/components/schemas/ItemKey"
+          $ref: '#/components/schemas/ItemKey'
         item_json:
           type: object
+          additionalProperties: true
 
     SetItemTagsRequest:
       type: object
@@ -486,9 +490,9 @@ components:
         operation:
           const: set_item_tags
         item_key:
-          $ref: "#/components/schemas/ItemKey"
+          $ref: '#/components/schemas/ItemKey'
         tags:
-          $ref: "#/components/schemas/NormalizedStringArray"
+          $ref: '#/components/schemas/NormalizedStringArray'
 
     AddItemTagsRequest:
       type: object
@@ -500,9 +504,9 @@ components:
         operation:
           const: add_item_tags
         item_key:
-          $ref: "#/components/schemas/ItemKey"
+          $ref: '#/components/schemas/ItemKey'
         tags:
-          $ref: "#/components/schemas/NormalizedStringArray"
+          $ref: '#/components/schemas/NormalizedStringArray'
 
     RemoveItemTagsRequest:
       type: object
@@ -514,9 +518,9 @@ components:
         operation:
           const: remove_item_tags
         item_key:
-          $ref: "#/components/schemas/ItemKey"
+          $ref: '#/components/schemas/ItemKey'
         tags:
-          $ref: "#/components/schemas/NormalizedStringArray"
+          $ref: '#/components/schemas/NormalizedStringArray'
 
     SetItemCollectionsRequest:
       type: object
@@ -528,9 +532,9 @@ components:
         operation:
           const: set_item_collections
         item_key:
-          $ref: "#/components/schemas/ItemKey"
+          $ref: '#/components/schemas/ItemKey'
         collection_keys:
-          $ref: "#/components/schemas/NormalizedStringArray"
+          $ref: '#/components/schemas/NormalizedStringArray'
 
     AddItemToCollectionRequest:
       type: object
@@ -542,9 +546,9 @@ components:
         operation:
           const: add_item_to_collection
         item_key:
-          $ref: "#/components/schemas/ItemKey"
+          $ref: '#/components/schemas/ItemKey'
         collection_key:
-          $ref: "#/components/schemas/CollectionKey"
+          $ref: '#/components/schemas/CollectionKey'
 
     RemoveItemFromCollectionRequest:
       type: object
@@ -556,9 +560,9 @@ components:
         operation:
           const: remove_item_from_collection
         item_key:
-          $ref: "#/components/schemas/ItemKey"
+          $ref: '#/components/schemas/ItemKey'
         collection_key:
-          $ref: "#/components/schemas/CollectionKey"
+          $ref: '#/components/schemas/CollectionKey'
 
     AttachNoteRequest:
       type: object
@@ -570,7 +574,7 @@ components:
         operation:
           const: attach_note
         parent_item_key:
-          $ref: "#/components/schemas/ItemKey"
+          $ref: '#/components/schemas/ItemKey'
         note_text:
           type: string
           description: Note body. May be an empty string.
@@ -587,7 +591,7 @@ components:
         operation:
           const: update_note
         note_key:
-          $ref: "#/components/schemas/ItemKey"
+          $ref: '#/components/schemas/ItemKey'
         new_content:
           type: string
           description: New note content. May be an empty string.
@@ -602,11 +606,11 @@ components:
         operation:
           const: attach_url
         parent_item_key:
-          $ref: "#/components/schemas/ItemKey"
+          $ref: '#/components/schemas/ItemKey'
         url:
-          $ref: "#/components/schemas/NonBlankString"
+          $ref: '#/components/schemas/NonBlankString'
         title:
-          $ref: "#/components/schemas/NonBlankString"
+          $ref: '#/components/schemas/NonBlankString'
 
     TrashItemRequest:
       type: object
@@ -617,7 +621,7 @@ components:
         operation:
           const: trash_item
         item_key:
-          $ref: "#/components/schemas/ItemKey"
+          $ref: '#/components/schemas/ItemKey'
 
     TrashCollectionRequest:
       type: object
@@ -628,7 +632,7 @@ components:
         operation:
           const: trash_collection
         collection_key:
-          $ref: "#/components/schemas/CollectionKey"
+          $ref: '#/components/schemas/CollectionKey'
 
     RelinkAttachmentFileRequest:
       type: object
@@ -640,9 +644,9 @@ components:
         operation:
           const: relink_attachment_file
         attachment_key:
-          $ref: "#/components/schemas/ItemKey"
+          $ref: '#/components/schemas/ItemKey'
         file_path:
-          $ref: "#/components/schemas/NonBlankString"
+          $ref: '#/components/schemas/NonBlankString'
 
     CreateCollectionRequest:
       type: object
@@ -653,9 +657,9 @@ components:
         operation:
           const: create_collection
         name:
-          $ref: "#/components/schemas/NonBlankString"
+          $ref: '#/components/schemas/NonBlankString'
         parent_key:
-          $ref: "#/components/schemas/CollectionKey"
+          $ref: '#/components/schemas/CollectionKey'
 
     RenameCollectionRequest:
       type: object
@@ -667,9 +671,9 @@ components:
         operation:
           const: rename_collection
         collection_key:
-          $ref: "#/components/schemas/CollectionKey"
+          $ref: '#/components/schemas/CollectionKey'
         new_name:
-          $ref: "#/components/schemas/NonBlankString"
+          $ref: '#/components/schemas/NonBlankString'
 
     MoveCollectionRequest:
       type: object
@@ -680,9 +684,9 @@ components:
         operation:
           const: move_collection
         collection_key:
-          $ref: "#/components/schemas/CollectionKey"
+          $ref: '#/components/schemas/CollectionKey'
         new_parent_key:
-          $ref: "#/components/schemas/CollectionKey"
+          $ref: '#/components/schemas/CollectionKey'
 
     MergeCollectionsRequest:
       type: object
@@ -694,9 +698,9 @@ components:
         operation:
           const: merge_collections
         source_keys:
-          $ref: "#/components/schemas/NormalizedStringArray"
+          $ref: '#/components/schemas/NormalizedStringArray'
         target_key:
-          $ref: "#/components/schemas/CollectionKey"
+          $ref: '#/components/schemas/CollectionKey'
 
     RenameTagRequest:
       type: object
@@ -708,9 +712,9 @@ components:
         operation:
           const: rename_tag
         old_name:
-          $ref: "#/components/schemas/NonBlankString"
+          $ref: '#/components/schemas/NonBlankString'
         new_name:
-          $ref: "#/components/schemas/NonBlankString"
+          $ref: '#/components/schemas/NonBlankString'
 
     MergeTagsRequest:
       type: object
@@ -722,9 +726,9 @@ components:
         operation:
           const: merge_tags
         source_tags:
-          $ref: "#/components/schemas/NormalizedStringArray"
+          $ref: '#/components/schemas/NormalizedStringArray'
         target_tag:
-          $ref: "#/components/schemas/NonBlankString"
+          $ref: '#/components/schemas/NonBlankString'
 
     DeleteTagRequest:
       type: object
@@ -735,7 +739,7 @@ components:
         operation:
           const: delete_tag
         tag_name:
-          $ref: "#/components/schemas/NonBlankString"
+          $ref: '#/components/schemas/NonBlankString'
 
     DeleteUnusedTagsRequest:
       type: object
@@ -754,7 +758,7 @@ components:
         operation:
           const: copy_item
         item_key:
-          $ref: "#/components/schemas/ItemKey"
+          $ref: '#/components/schemas/ItemKey'
 
     MergeItemsRequest:
       type: object
@@ -766,9 +770,9 @@ components:
         operation:
           const: merge_items
         source_key:
-          $ref: "#/components/schemas/ItemKey"
+          $ref: '#/components/schemas/ItemKey'
         target_key:
-          $ref: "#/components/schemas/ItemKey"
+          $ref: '#/components/schemas/ItemKey'
 
     CreateItemRequest:
       type: object
@@ -779,13 +783,14 @@ components:
         operation:
           const: create_item
         item_type:
-          $ref: "#/components/schemas/NonBlankString"
+          $ref: '#/components/schemas/NonBlankString'
         fields:
           type: object
+          additionalProperties: true
         tags:
-          $ref: "#/components/schemas/NormalizedStringArray"
+          $ref: '#/components/schemas/NormalizedStringArray'
         collection_keys:
-          $ref: "#/components/schemas/NormalizedStringArray"
+          $ref: '#/components/schemas/NormalizedStringArray'
 
     ImportBibtexRequest:
       type: object
@@ -796,9 +801,9 @@ components:
         operation:
           const: import_bibtex
         bibtex:
-          $ref: "#/components/schemas/NonBlankString"
+          $ref: '#/components/schemas/NonBlankString'
         collection_keys:
-          $ref: "#/components/schemas/NormalizedStringArray"
+          $ref: '#/components/schemas/NormalizedStringArray'
 
     ImportByIdentifierRequest:
       type: object
@@ -809,9 +814,9 @@ components:
         operation:
           const: import_by_identifier
         identifier:
-          $ref: "#/components/schemas/NonBlankString"
+          $ref: '#/components/schemas/NonBlankString'
         collection_keys:
-          $ref: "#/components/schemas/NormalizedStringArray"
+          $ref: '#/components/schemas/NormalizedStringArray'
 
     GetSelectedCollectionRequest:
       type: object
@@ -830,7 +835,7 @@ components:
         operation:
           const: restore_item
         item_key:
-          $ref: "#/components/schemas/ItemKey"
+          $ref: '#/components/schemas/ItemKey'
 
     UpdateAttachmentTitleRequest:
       type: object
@@ -842,87 +847,87 @@ components:
         operation:
           const: update_attachment_title
         attachment_key:
-          $ref: "#/components/schemas/ItemKey"
+          $ref: '#/components/schemas/ItemKey'
         new_title:
-          $ref: "#/components/schemas/NonBlankString"
+          $ref: '#/components/schemas/NonBlankString'
 
     # ── /write success response union ──────────────────────────────
 
     WriteSuccessResponse:
       oneOf:
-        - $ref: "#/components/schemas/SyncSuccess"
-        - $ref: "#/components/schemas/RunJavascriptSuccess"
-        - $ref: "#/components/schemas/UpdateItemFieldsSuccess"
-        - $ref: "#/components/schemas/ReplaceItemJsonSuccess"
-        - $ref: "#/components/schemas/SetItemTagsSuccess"
-        - $ref: "#/components/schemas/AddItemTagsSuccess"
-        - $ref: "#/components/schemas/RemoveItemTagsSuccess"
-        - $ref: "#/components/schemas/SetItemCollectionsSuccess"
-        - $ref: "#/components/schemas/AddItemToCollectionSuccess"
-        - $ref: "#/components/schemas/RemoveItemFromCollectionSuccess"
-        - $ref: "#/components/schemas/AttachNoteSuccess"
-        - $ref: "#/components/schemas/UpdateNoteSuccess"
-        - $ref: "#/components/schemas/AttachUrlSuccess"
-        - $ref: "#/components/schemas/TrashItemSuccess"
-        - $ref: "#/components/schemas/TrashCollectionSuccess"
-        - $ref: "#/components/schemas/RelinkAttachmentFileSuccess"
-        - $ref: "#/components/schemas/CreateCollectionSuccess"
-        - $ref: "#/components/schemas/RenameCollectionSuccess"
-        - $ref: "#/components/schemas/MoveCollectionSuccess"
-        - $ref: "#/components/schemas/MergeCollectionsSuccess"
-        - $ref: "#/components/schemas/RenameTagSuccess"
-        - $ref: "#/components/schemas/MergeTagsSuccess"
-        - $ref: "#/components/schemas/DeleteTagSuccess"
-        - $ref: "#/components/schemas/DeleteUnusedTagsSuccess"
-        - $ref: "#/components/schemas/CopyItemSuccess"
-        - $ref: "#/components/schemas/MergeItemsSuccess"
-        - $ref: "#/components/schemas/CreateItemSuccess"
-        - $ref: "#/components/schemas/ImportBibtexSuccess"
-        - $ref: "#/components/schemas/ImportByIdentifierSuccess"
-        - $ref: "#/components/schemas/GetSelectedCollectionSuccess"
-        - $ref: "#/components/schemas/RestoreItemSuccess"
-        - $ref: "#/components/schemas/UpdateAttachmentTitleSuccess"
+        - $ref: '#/components/schemas/SyncSuccess'
+        - $ref: '#/components/schemas/RunJavascriptSuccess'
+        - $ref: '#/components/schemas/UpdateItemFieldsSuccess'
+        - $ref: '#/components/schemas/ReplaceItemJsonSuccess'
+        - $ref: '#/components/schemas/SetItemTagsSuccess'
+        - $ref: '#/components/schemas/AddItemTagsSuccess'
+        - $ref: '#/components/schemas/RemoveItemTagsSuccess'
+        - $ref: '#/components/schemas/SetItemCollectionsSuccess'
+        - $ref: '#/components/schemas/AddItemToCollectionSuccess'
+        - $ref: '#/components/schemas/RemoveItemFromCollectionSuccess'
+        - $ref: '#/components/schemas/AttachNoteSuccess'
+        - $ref: '#/components/schemas/UpdateNoteSuccess'
+        - $ref: '#/components/schemas/AttachUrlSuccess'
+        - $ref: '#/components/schemas/TrashItemSuccess'
+        - $ref: '#/components/schemas/TrashCollectionSuccess'
+        - $ref: '#/components/schemas/RelinkAttachmentFileSuccess'
+        - $ref: '#/components/schemas/CreateCollectionSuccess'
+        - $ref: '#/components/schemas/RenameCollectionSuccess'
+        - $ref: '#/components/schemas/MoveCollectionSuccess'
+        - $ref: '#/components/schemas/MergeCollectionsSuccess'
+        - $ref: '#/components/schemas/RenameTagSuccess'
+        - $ref: '#/components/schemas/MergeTagsSuccess'
+        - $ref: '#/components/schemas/DeleteTagSuccess'
+        - $ref: '#/components/schemas/DeleteUnusedTagsSuccess'
+        - $ref: '#/components/schemas/CopyItemSuccess'
+        - $ref: '#/components/schemas/MergeItemsSuccess'
+        - $ref: '#/components/schemas/CreateItemSuccess'
+        - $ref: '#/components/schemas/ImportBibtexSuccess'
+        - $ref: '#/components/schemas/ImportByIdentifierSuccess'
+        - $ref: '#/components/schemas/GetSelectedCollectionSuccess'
+        - $ref: '#/components/schemas/RestoreItemSuccess'
+        - $ref: '#/components/schemas/UpdateAttachmentTitleSuccess'
       discriminator:
         propertyName: operation
         mapping:
-          sync: "#/components/schemas/SyncSuccess"
-          run_javascript: "#/components/schemas/RunJavascriptSuccess"
-          update_item_fields: "#/components/schemas/UpdateItemFieldsSuccess"
-          replace_item_json: "#/components/schemas/ReplaceItemJsonSuccess"
-          set_item_tags: "#/components/schemas/SetItemTagsSuccess"
-          add_item_tags: "#/components/schemas/AddItemTagsSuccess"
-          remove_item_tags: "#/components/schemas/RemoveItemTagsSuccess"
-          set_item_collections: "#/components/schemas/SetItemCollectionsSuccess"
-          add_item_to_collection: "#/components/schemas/AddItemToCollectionSuccess"
-          remove_item_from_collection: "#/components/schemas/RemoveItemFromCollectionSuccess"
-          attach_note: "#/components/schemas/AttachNoteSuccess"
-          update_note: "#/components/schemas/UpdateNoteSuccess"
-          attach_url: "#/components/schemas/AttachUrlSuccess"
-          trash_item: "#/components/schemas/TrashItemSuccess"
-          trash_collection: "#/components/schemas/TrashCollectionSuccess"
-          relink_attachment_file: "#/components/schemas/RelinkAttachmentFileSuccess"
-          create_collection: "#/components/schemas/CreateCollectionSuccess"
-          rename_collection: "#/components/schemas/RenameCollectionSuccess"
-          move_collection: "#/components/schemas/MoveCollectionSuccess"
-          merge_collections: "#/components/schemas/MergeCollectionsSuccess"
-          rename_tag: "#/components/schemas/RenameTagSuccess"
-          merge_tags: "#/components/schemas/MergeTagsSuccess"
-          delete_tag: "#/components/schemas/DeleteTagSuccess"
-          delete_unused_tags: "#/components/schemas/DeleteUnusedTagsSuccess"
-          copy_item: "#/components/schemas/CopyItemSuccess"
-          merge_items: "#/components/schemas/MergeItemsSuccess"
-          create_item: "#/components/schemas/CreateItemSuccess"
-          import_bibtex: "#/components/schemas/ImportBibtexSuccess"
-          import_by_identifier: "#/components/schemas/ImportByIdentifierSuccess"
-          get_selected_collection: "#/components/schemas/GetSelectedCollectionSuccess"
-          restore_item: "#/components/schemas/RestoreItemSuccess"
-          update_attachment_title: "#/components/schemas/UpdateAttachmentTitleSuccess"
+          sync: '#/components/schemas/SyncSuccess'
+          run_javascript: '#/components/schemas/RunJavascriptSuccess'
+          update_item_fields: '#/components/schemas/UpdateItemFieldsSuccess'
+          replace_item_json: '#/components/schemas/ReplaceItemJsonSuccess'
+          set_item_tags: '#/components/schemas/SetItemTagsSuccess'
+          add_item_tags: '#/components/schemas/AddItemTagsSuccess'
+          remove_item_tags: '#/components/schemas/RemoveItemTagsSuccess'
+          set_item_collections: '#/components/schemas/SetItemCollectionsSuccess'
+          add_item_to_collection: '#/components/schemas/AddItemToCollectionSuccess'
+          remove_item_from_collection: '#/components/schemas/RemoveItemFromCollectionSuccess'
+          attach_note: '#/components/schemas/AttachNoteSuccess'
+          update_note: '#/components/schemas/UpdateNoteSuccess'
+          attach_url: '#/components/schemas/AttachUrlSuccess'
+          trash_item: '#/components/schemas/TrashItemSuccess'
+          trash_collection: '#/components/schemas/TrashCollectionSuccess'
+          relink_attachment_file: '#/components/schemas/RelinkAttachmentFileSuccess'
+          create_collection: '#/components/schemas/CreateCollectionSuccess'
+          rename_collection: '#/components/schemas/RenameCollectionSuccess'
+          move_collection: '#/components/schemas/MoveCollectionSuccess'
+          merge_collections: '#/components/schemas/MergeCollectionsSuccess'
+          rename_tag: '#/components/schemas/RenameTagSuccess'
+          merge_tags: '#/components/schemas/MergeTagsSuccess'
+          delete_tag: '#/components/schemas/DeleteTagSuccess'
+          delete_unused_tags: '#/components/schemas/DeleteUnusedTagsSuccess'
+          copy_item: '#/components/schemas/CopyItemSuccess'
+          merge_items: '#/components/schemas/MergeItemsSuccess'
+          create_item: '#/components/schemas/CreateItemSuccess'
+          import_bibtex: '#/components/schemas/ImportBibtexSuccess'
+          import_by_identifier: '#/components/schemas/ImportByIdentifierSuccess'
+          get_selected_collection: '#/components/schemas/GetSelectedCollectionSuccess'
+          restore_item: '#/components/schemas/RestoreItemSuccess'
+          update_attachment_title: '#/components/schemas/UpdateAttachmentTitleSuccess'
 
     # ── Success schemas (one per operation) ────────────────────────
 
     SyncSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           properties:
             operation:
@@ -940,7 +945,7 @@ components:
 
     RunJavascriptSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           properties:
             operation:
@@ -955,7 +960,7 @@ components:
 
     UpdateItemFieldsSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           properties:
             operation:
@@ -976,7 +981,7 @@ components:
 
     ReplaceItemJsonSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           properties:
             operation:
@@ -995,7 +1000,7 @@ components:
 
     SetItemTagsSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           properties:
             operation:
@@ -1019,7 +1024,7 @@ components:
 
     AddItemTagsSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           properties:
             operation:
@@ -1043,7 +1048,7 @@ components:
 
     RemoveItemTagsSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           properties:
             operation:
@@ -1065,7 +1070,7 @@ components:
 
     SetItemCollectionsSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           properties:
             operation:
@@ -1086,7 +1091,7 @@ components:
 
     AddItemToCollectionSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           properties:
             operation:
@@ -1108,7 +1113,7 @@ components:
 
     RemoveItemFromCollectionSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           properties:
             operation:
@@ -1130,7 +1135,7 @@ components:
 
     AttachNoteSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           required:
             - note_key
@@ -1156,12 +1161,12 @@ components:
                 title:
                   type:
                     - string
-                    - "null"
+                    - 'null'
       unevaluatedProperties: false
 
     UpdateNoteSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           properties:
             operation:
@@ -1178,14 +1183,14 @@ components:
                 parent_item_key:
                   type:
                     - string
-                    - "null"
+                    - 'null'
                 content_length:
                   type: integer
       unevaluatedProperties: false
 
     AttachUrlSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           required:
             - attachment_key
@@ -1211,12 +1216,12 @@ components:
                 title:
                   type:
                     - string
-                    - "null"
+                    - 'null'
       unevaluatedProperties: false
 
     TrashItemSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           properties:
             operation:
@@ -1235,18 +1240,18 @@ components:
 
     TrashCollectionSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           properties:
             operation:
               const: trash_collection
             details:
-              $ref: "#/components/schemas/CollectionDetails"
+              $ref: '#/components/schemas/CollectionDetails'
       unevaluatedProperties: false
 
     RelinkAttachmentFileSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           properties:
             operation:
@@ -1265,40 +1270,40 @@ components:
 
     CreateCollectionSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           properties:
             operation:
               const: create_collection
             details:
-              $ref: "#/components/schemas/CollectionDetails"
+              $ref: '#/components/schemas/CollectionDetails'
       unevaluatedProperties: false
 
     RenameCollectionSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           properties:
             operation:
               const: rename_collection
             details:
-              $ref: "#/components/schemas/CollectionDetails"
+              $ref: '#/components/schemas/CollectionDetails'
       unevaluatedProperties: false
 
     MoveCollectionSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           properties:
             operation:
               const: move_collection
             details:
-              $ref: "#/components/schemas/CollectionDetails"
+              $ref: '#/components/schemas/CollectionDetails'
       unevaluatedProperties: false
 
     MergeCollectionsSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           properties:
             operation:
@@ -1328,7 +1333,7 @@ components:
 
     RenameTagSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           properties:
             operation:
@@ -1347,7 +1352,7 @@ components:
 
     MergeTagsSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           properties:
             operation:
@@ -1368,7 +1373,7 @@ components:
 
     DeleteTagSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           properties:
             operation:
@@ -1387,7 +1392,7 @@ components:
 
     DeleteUnusedTagsSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           properties:
             operation:
@@ -1399,7 +1404,7 @@ components:
 
     CopyItemSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           required:
             - new_key
@@ -1428,7 +1433,7 @@ components:
 
     MergeItemsSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           properties:
             operation:
@@ -1464,7 +1469,7 @@ components:
 
     CreateItemSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           required:
             - item_key
@@ -1498,7 +1503,7 @@ components:
 
     ImportBibtexSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           required:
             - item_key
@@ -1544,7 +1549,7 @@ components:
 
     ImportByIdentifierSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           required:
             - item_key
@@ -1590,7 +1595,7 @@ components:
 
     GetSelectedCollectionSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           properties:
             operation:
@@ -1609,7 +1614,7 @@ components:
 
     RestoreItemSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           properties:
             operation:
@@ -1628,7 +1633,7 @@ components:
 
     UpdateAttachmentTitleSuccess:
       allOf:
-        - $ref: "#/components/schemas/SuccessEnvelope"
+        - $ref: '#/components/schemas/SuccessEnvelope'
         - type: object
           properties:
             operation:
