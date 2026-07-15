@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import time
+import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -95,9 +96,26 @@ def get_children(item_key: str) -> list[dict[str, Any]]:
     return children
 
 
+def nfc(value: str) -> str:
+    """Normalize text the way Zotero stores it.
+
+    Zotero NFC-normalizes item field values and tag names on write, so a
+    read-back is equal to ``NFC(sent)``, not to the bytes sent. Verified live
+    against Zotero 8.0.1 over titles and tags for decomposed sequences
+    (``e`` + U+0301 -> U+00E9), singleton mappings (U+212B -> U+00C5), and
+    composition exclusions where NFC decomposes the input (U+0A33 -> U+0A32
+    U+0A3C); NFD and byte-identity were both falsified.
+
+    So round-trip assertions compare NFC forms. That is the real contract:
+    asserting byte-identity would assert a promise Zotero does not make.
+    """
+    return unicodedata.normalize("NFC", value)
+
+
 def tag_names(item: dict[str, Any]) -> set[str]:
+    """The item's tag names, NFC-normalized to match Zotero's own storage."""
     return {
-        tag["tag"].strip()
+        nfc(tag["tag"].strip())
         for tag in item["data"].get("tags", [])
         if tag["tag"].strip()
     }
