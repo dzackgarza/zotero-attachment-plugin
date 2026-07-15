@@ -47,56 +47,27 @@ jobs:
           pip install pyyaml
           uv sync --frozen
 
-      - name: Build XPI from the checked-out SHA
-        run: |
-          python3 build.py
-          echo "VERSION=$(cat VERSION)" >> "$GITHUB_ENV"
+      - name: Read the version under proof
+        run: echo "VERSION=$(just version)" >> "$GITHUB_ENV"
 
+      # Build, install, byte-compare, purgecache-restart, and wait for the built
+      # version + capabilities. This routes through the same `just install-live`
+      # the workstation uses rather than re-implementing it: that sequence is
+      # what catches the stale-build trap, and a second copy here could drift
+      # until CI proved something different from local.
+      #
       # ZOTERO_PROFILE_DIR and ZOTERO_DISPOSABLE_PROFILE are provided by the
       # runner and must point at the throwaway profile, never a real library.
-      - name: Install the built XPI into the disposable profile
+      - name: Build and install the XPI into the disposable profile
+        env:
+          ZOTERO_LOG: ${{ runner.temp }}/zotero.log
         run: |
-          xpi="local-write-api-${VERSION}.xpi"
-          ext_dir="${ZOTERO_PROFILE_DIR}/extensions"
-          mkdir -p "$ext_dir"
-          installed="${ext_dir}/local-write-api@dzackgarza.com.xpi"
-          cp "$xpi" "$installed"
-          built=$(sha256sum "$xpi" | cut -d' ' -f1)
-          live=$(sha256sum "$installed" | cut -d' ' -f1)
-          echo "built=$built installed=$live"
-          # A matching version string is NOT proof the current code is loaded;
-          # only identical bytes are.
-          test "$built" = "$live"
-
-      - name: Restart Zotero with cache purge
-        run: |
-          pkill -x zotero-bin || true
-          pkill -x zotero || true
-          sleep 3
-          setsid env \
-            DISPLAY="${DISPLAY:-:0}" \
-            XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" \
-            zotero -P "${ZOTERO_DISPOSABLE_PROFILE}" -purgecaches \
-            >"${RUNNER_TEMP}/zotero.log" 2>&1 < /dev/null &
-
-      - name: Wait for the add-on and require the built version + capabilities
-        run: |
-          base="${ZOTERO_LOCAL_BASE_URL:-http://127.0.0.1:23119}"
-          for _ in $(seq 1 60); do
-            if curl -fsS "$base/version" -o /tmp/version.json 2>/dev/null; then
-              python3 - <<'PY' && exit 0
-          import json, os, sys
-          v = json.load(open("/tmp/version.json"))
-          assert v.get("version") == os.environ["VERSION"], v
-          caps = set(v.get("capabilities") or [])
-          required = {"attach", "attach_bytes", "write", "version_probe", "import_bibtex"}
-          assert required <= caps, f"missing capabilities: {required - caps}"
-          PY
-            fi
-            sleep 2
-          done
-          echo "Zotero did not come up with version ${VERSION}" >&2
-          exit 1
+          # ZOTERO_PROFILE_DIR is a machine env var on the runner and is inherited
+          # as-is. It is deliberately not restated through the workflow env
+          # context, which does not carry machine env and would blank it out.
+          export ZOTERO_PROFILE_NAME="${ZOTERO_DISPOSABLE_PROFILE:?runner must provide the disposable profile name}"
+          : "${ZOTERO_PROFILE_DIR:?runner must provide the disposable profile dir}"
+          just install-live
 
       - name: Smoke proof
         run: EXPECTED_VERSION=${VERSION} just smoke-live
@@ -106,6 +77,9 @@ jobs:
 
       - name: Stateful workflow proof
         run: just schemathesis-stateful-live
+
+      - name: Generated client wrapper proof
+        run: just client-live
 
       - name: Upload artifacts
         if: always()

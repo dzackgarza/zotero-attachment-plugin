@@ -53,11 +53,22 @@ smoke-live:
     fi
     python3 examples/live_smoke.py "${args[@]}"
 
-# Build the working-tree XPI and hot-install it into the active Zotero profile,
-# then restart Zotero with a cache purge so the current code is actually loaded.
-# This REPLACES the running add-on and RESTARTS your Zotero (closing the current
+# Build the working-tree XPI and hot-install it into a Zotero profile, then
+# restart Zotero with a cache purge so the current code is actually loaded, and
+# wait until the add-on answers with the built version and its capabilities.
+#
+# This REPLACES the running add-on and RESTARTS Zotero (closing the current
 # session). updates.json is a release channel, not a reliable local same-version
-# reload, so the proven local path is replace-profile-XPI + restart (AGENTS.md).
+# reload, so the proven path is replace-profile-XPI + restart (AGENTS.md).
+#
+# This is the ONLY install path. Locally it targets the active Default=1 profile;
+# CI sets ZOTERO_PROFILE_DIR (and ZOTERO_PROFILE_NAME, passed to -P) to target a
+# disposable profile. The build -> byte-compare -> purgecache-restart -> version
+# wait sequence is what catches the stale-build trap, so CI must not re-implement
+# it: a second copy that drifts would prove something different from local.
+#   ZOTERO_PROFILE_DIR   override the profile directory (default: Default=1)
+#   ZOTERO_PROFILE_NAME  profile name for `zotero -P` (default: none)
+[doc("Build, install, and restart Zotero so the working-tree XPI is live (RESTARTS Zotero)")]
 install-live:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -68,11 +79,10 @@ install-live:
     python3 build.py
     test -f "$xpi" || { echo "expected $xpi was not built" >&2; exit 1; }
 
-    # 2. Discover the active (Default=1) profile from profiles.ini.
-    ini="$HOME/.zotero/zotero/profiles.ini"
-    profile="$(awk -F= '/^\[/{p=""} /^Path=/{p=$2} /^Default=1/{print p}' "$ini")"
-    test -n "$profile" || { echo "no Default profile in $ini" >&2; exit 1; }
-    ext_dir="$HOME/.zotero/zotero/${profile}/extensions"
+    # 2. Resolve the target profile: CI provides one, otherwise Default=1.
+    profile_dir="${ZOTERO_PROFILE_DIR:-$(just _default-profile-dir)}"
+    test -d "$profile_dir" || { echo "profile dir not found: $profile_dir" >&2; exit 1; }
+    ext_dir="${profile_dir}/extensions"
     installed="${ext_dir}/local-write-api@dzackgarza.com.xpi"
 
     # 3. Timestamped backup of the currently installed XPI.
@@ -95,25 +105,72 @@ install-live:
     pkill -x zotero-bin || true
     pkill -x zotero || true
     sleep 3
+    profile_args=()
+    if [[ -n "${ZOTERO_PROFILE_NAME:-}" ]]; then
+        profile_args+=(-P "${ZOTERO_PROFILE_NAME}")
+    fi
+    log="${ZOTERO_LOG:-/tmp/zotero-local-write-api-zotero.log}"
     setsid env \
         DISPLAY="${DISPLAY:-:0}" \
         WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}" \
         XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" \
         DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/$(id -u)/bus}" \
-        zotero -purgecaches >/tmp/zotero-local-write-api-zotero.log 2>&1 < /dev/null &
+        zotero "${profile_args[@]}" -purgecaches >"$log" 2>&1 < /dev/null &
 
-    # 6. Wait for the add-on to answer with the just-built version.
+    # 6. Wait for the add-on to answer with the just-built version AND the
+    #    capabilities the proofs rely on. Version alone would pass against a
+    #    build that dropped an endpoint.
     base="${ZOTERO_LOCAL_BASE_URL:-http://127.0.0.1:23119}"
+    probe="$(mktemp)"
+    trap 'rm -f "$probe"' EXIT
     for _ in $(seq 1 60); do
-        got="$(curl -fsS "$base/version" 2>/dev/null | python3 -c 'import sys,json; print(json.load(sys.stdin).get("version",""))' 2>/dev/null || true)"
-        if [[ "$got" == "$version" ]]; then
-            echo "Zotero up with version $version — run 'EXPECTED_VERSION=$version just smoke-live' to prove behavior"
-            exit 0
+        if curl -fsS "$base/version" -o "$probe" 2>/dev/null; then
+            if python3 -c '
+    import json, sys
+    probe, expected = sys.argv[1], sys.argv[2]
+    v = json.load(open(probe))
+    if v.get("version") != expected:
+        sys.exit(1)
+    required = {"attach", "attach_bytes", "write", "version_probe", "import_bibtex"}
+    missing = required - set(v.get("capabilities") or [])
+    if missing:
+        sys.exit(f"add-on is missing capabilities: {sorted(missing)}")
+    ' "$probe" "$version"; then
+                echo "Zotero up with version $version — run 'EXPECTED_VERSION=$version just smoke-live' to prove behavior"
+                exit 0
+            fi
         fi
         sleep 2
     done
-    echo "Zotero did not report version $version within timeout; see /tmp/zotero-local-write-api-zotero.log" >&2
+    echo "Zotero did not report version $version within timeout; see $log" >&2
     exit 1
+
+# Path of the active (Default=1) Zotero profile directory.
+[private]
+_default-profile-dir:
+    #!/usr/bin/env python3
+    # profiles.ini is INI, so it is parsed with configparser rather than matched
+    # with a line-order-dependent regex: Default= and Path= may appear in either
+    # order within a section, and only [Profile*] sections carry Default=1 (an
+    # [Install*] section's Default= is a path, not a flag).
+    import configparser, pathlib, sys
+
+    ini = pathlib.Path.home() / ".zotero/zotero/profiles.ini"
+    if not ini.is_file():
+        sys.exit(f"no profiles.ini at {ini}")
+    cfg = configparser.ConfigParser()
+    cfg.read(ini)
+    for name in cfg.sections():
+        section = cfg[name]
+        if "Path" not in section or section.get("Default", "").strip() != "1":
+            continue
+        path = pathlib.Path(section["Path"])
+        if section.get("IsRelative", "1").strip() == "1":
+            path = ini.parent / path
+        print(path)
+        break
+    else:
+        sys.exit(f"no Default=1 profile with a Path in {ini}")
 
 # Static OpenAPI contract check (lint + generated-drift + dispatch conformance)
 openapi-check:
@@ -122,6 +179,7 @@ openapi-check:
 # Generic Schemathesis fuzzing against a live Zotero.
 # MUTATING: point ZOTERO_LOCAL_BASE_URL at a disposable test profile, never a
 # real library. The filter_case hook excludes dangerous/networked/bulk ops.
+[doc("Generic Schemathesis fuzz against a live Zotero (MUTATING: use a disposable profile)")]
 schemathesis-fuzz-live:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -138,14 +196,23 @@ schemathesis-fuzz-live:
             --report junit,har --report-dir schemathesis-report
     done
 
+# Live proof of the generated OpenAPI client wrapper (src/client.ts) against a
+# real Zotero: real POST /write, body serialized unchanged, typed success/error
+# split. MUTATING, so it is opt-in via ZOTERO_LIVE and is never collected by
+# ordinary `bun test`; objects are uniquely prefixed and trashed afterwards.
+[doc("Live proof of the generated TypeScript client wrapper (MUTATING, opt-in)")]
+client-live:
+    ZOTERO_LIVE=1 bun test tests/client-live.test.ts
+
 # Stateful create/note/collection/tag/merge/restore/trash proof with Zotero
 # read-back. Safe against a real library: unique-prefixed objects, cleanup in
 # teardown. Skips when no live add-on is reachable.
+[doc("Stateful create/merge/restore/trash workflow proof against a live Zotero")]
 schemathesis-stateful-live:
     uv run pytest tests/schemathesis/test_stateful.py -q
 
-# Full live API proof: generic fuzz, stateful workflow, and the smoke proof.
-api-live: schemathesis-fuzz-live schemathesis-stateful-live smoke-live
+# Full live API proof: generic fuzz, stateful workflow, client wrapper, smoke.
+api-live: schemathesis-fuzz-live schemathesis-stateful-live client-live smoke-live
 
 # Run all checks (typecheck + lint)
 check: typecheck lint
@@ -161,6 +228,7 @@ release-major: (_release "major")
 
 # Regenerate plugin icons via Replicate (requires REPLICATE_API_TOKEN in env)
 # Run this, commit src/icons/, then cut a release.
+[doc("Regenerate plugin icons via Replicate (requires REPLICATE_API_TOKEN)")]
 gen-icons:
     #!/usr/bin/env python3
     import os, time, urllib.request, json
