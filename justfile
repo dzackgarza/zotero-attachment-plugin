@@ -53,6 +53,38 @@ smoke-live:
     fi
     python3 examples/live_smoke.py "${args[@]}"
 
+# Static OpenAPI contract check (lint + generated-drift + dispatch conformance)
+openapi-check:
+    bun run openapi:check
+
+# Generic Schemathesis fuzzing against a live Zotero.
+# MUTATING: point ZOTERO_LOCAL_BASE_URL at a disposable test profile, never a
+# real library. The filter_case hook excludes dangerous/networked/bulk ops.
+schemathesis-fuzz-live:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    url="${ZOTERO_LOCAL_BASE_URL:-http://127.0.0.1:23119}"
+    export PYTHONPATH="${PYTHONPATH:-}:."
+    export SCHEMATHESIS_HOOKS="tests.schemathesis.hooks"
+    # A fixed seed for a reproducible run, then a randomized exploration run.
+    # Both emit JUnit + HAR reproduction artifacts. The stateful workflow runs
+    # separately via schemathesis-stateful-live.
+    for seed in "--seed 0" ""; do
+        uv run st run openapi.yaml --url "$url" \
+            --phases examples,coverage,fuzzing \
+            ${seed} \
+            --report junit,har --report-dir schemathesis-report
+    done
+
+# Stateful create/note/collection/tag/merge/restore/trash proof with Zotero
+# read-back. Safe against a real library: unique-prefixed objects, cleanup in
+# teardown. Skips when no live add-on is reachable.
+schemathesis-stateful-live:
+    uv run pytest tests/schemathesis/test_stateful.py -q
+
+# Full live API proof: generic fuzz, stateful workflow, and the smoke proof.
+api-live: schemathesis-fuzz-live schemathesis-stateful-live smoke-live
+
 # Run all checks (typecheck + lint)
 check: typecheck lint
 

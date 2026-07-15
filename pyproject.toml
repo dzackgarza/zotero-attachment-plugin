@@ -1,0 +1,19 @@
+[project]
+name = "zotero-local-write-api-tests"
+version = "0.0.0"
+description = "Schemathesis contract and stateful proofs for the Zotero Local Write API."
+requires-python = ">=3.11"
+dependencies = [
+    "schemathesis>=4.0,<5",
+    "pytest>=8,<9",
+    "hypothesis>=6,<7",
+]
+
+# Non-package test environment: there is nothing to build or install, only
+# tests to run against a live Zotero instance.
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests/schemathesis"]
+pythonpath = ["."]
