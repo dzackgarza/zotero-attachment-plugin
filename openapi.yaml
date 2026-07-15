@@ -296,7 +296,7 @@ components:
           $ref: '#/components/schemas/NonBlankString'
         file_bytes_base64:
           allOf:
-            - $ref: "#/components/schemas/NonBlankString"
+            - $ref: '#/components/schemas/NonBlankString'
           contentEncoding: base64
           description: >
             Base64-encoded file bytes. Must be non-blank: the endpoint reads it
