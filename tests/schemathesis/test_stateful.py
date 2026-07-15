@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import pytest
 import schemathesis
-from hypothesis import HealthCheck, settings
+from hypothesis import settings
 from hypothesis import strategies as st
 from hypothesis.stateful import (
     RuleBasedStateMachine,
@@ -104,9 +104,7 @@ class ZoteroWriteWorkflow(RuleBasedStateMachine):
         )
         self.source_key = payload["item_key"]
         assert self.source_key
-        assert helpers.wait_for(
-            lambda: helpers.get_item(self.source_key)["data"].get("title") == title
-        ), "source title mismatch on read-back"
+        assert helpers.get_item(self.source_key)["data"]["title"] == title
         self.step = 2
 
     @precondition(lambda self: self.step == 2)
@@ -121,12 +119,10 @@ class ZoteroWriteWorkflow(RuleBasedStateMachine):
         )
         self.note_key = payload["note_key"]
         assert self.note_key
-        assert helpers.wait_for(
-            lambda: any(
-                child.get("key") == self.note_key
-                for child in helpers.get_children(self.source_key)
-            )
-        ), f"note {self.note_key} not a child of source"
+        children = helpers.get_children(self.source_key)
+        assert any(child.get("key") == self.note_key for child in children), (
+            f"note {self.note_key} not a child of source: {children!r}"
+        )
         self.step = 3
 
     @precondition(lambda self: self.step == 3)
@@ -139,10 +135,8 @@ class ZoteroWriteWorkflow(RuleBasedStateMachine):
                 "collection_key": self.collection_key,
             }
         )
-        assert helpers.wait_for(
-            lambda: self.collection_key
-            in helpers.get_item(self.source_key)["data"].get("collections", [])
-        ), "source not in collection on read-back"
+        collections = helpers.get_item(self.source_key)["data"].get("collections", [])
+        assert self.collection_key in collections, f"source not in collection: {collections!r}"
         self.step = 4
 
     @precondition(lambda self: self.step == 4)
@@ -155,10 +149,8 @@ class ZoteroWriteWorkflow(RuleBasedStateMachine):
                 "tags": [self.keep_tag, self.remove_tag],
             }
         )
-        assert helpers.wait_for(
-            lambda: {self.keep_tag, self.remove_tag}
-            <= helpers.tag_names(helpers.get_item(self.source_key))
-        ), "tags missing on read-back"
+        tags = helpers.tag_names(helpers.get_item(self.source_key))
+        assert {self.keep_tag, self.remove_tag} <= tags, f"tags missing: {tags!r}"
         self.step = 5
 
     @precondition(lambda self: self.step == 5)
@@ -171,11 +163,9 @@ class ZoteroWriteWorkflow(RuleBasedStateMachine):
                 "tags": [self.remove_tag],
             }
         )
-        def removed_and_kept() -> bool:
-            tags = helpers.tag_names(helpers.get_item(self.source_key))
-            return self.remove_tag not in tags and self.keep_tag in tags
-
-        assert helpers.wait_for(removed_and_kept), "remove/keep tag state wrong on read-back"
+        tags = helpers.tag_names(helpers.get_item(self.source_key))
+        assert self.remove_tag not in tags, f"remove tag survived: {tags!r}"
+        assert self.keep_tag in tags, f"keep tag lost: {tags!r}"
         self.step = 6
 
     @precondition(lambda self: self.step == 6)
@@ -209,22 +199,18 @@ class ZoteroWriteWorkflow(RuleBasedStateMachine):
             ), f"transfer counter {field} not int: {transferred!r}"
         assert transferred["notes"] >= 1, f"expected note transfer: {transferred!r}"
 
-        # Zotero applies these mutations asynchronously; poll rather than read
-        # once, so the proof is not intermittently flaky.
+        # Zotero's trash is deferred, so the source's deleted flag is the one
+        # value that must be polled (same as live_smoke's _wait_for_deleted).
         assert helpers.wait_for(
             lambda: helpers.is_deleted(self.source_key)
         ), "merged source not deleted"
         target = helpers.get_item(self.target_key)
         assert not target["data"].get("deleted"), "merge target deleted"
-        assert helpers.wait_for(
-            lambda: any(
-                child.get("key") == self.note_key
-                for child in helpers.get_children(self.target_key)
-            )
-        ), "note did not move under target"
-        assert helpers.wait_for(
-            lambda: self.keep_tag in helpers.tag_names(helpers.get_item(self.target_key))
-        ), "kept tag did not transfer to target"
+        target_children = helpers.get_children(self.target_key)
+        assert any(child.get("key") == self.note_key for child in target_children), (
+            f"note did not move under target: {target_children!r}"
+        )
+        assert self.keep_tag in helpers.tag_names(target), "kept tag did not transfer to target"
         self.step = 8
 
     @precondition(lambda self: self.step == 8)
@@ -275,7 +261,6 @@ ZoteroWriteWorkflow.TestCase.settings = settings(
     max_examples=1,
     stateful_step_count=12,
     deadline=None,
-    suppress_health_check=[HealthCheck.filter_too_much],
 )
 
 TestZoteroWriteWorkflow = ZoteroWriteWorkflow.TestCase
