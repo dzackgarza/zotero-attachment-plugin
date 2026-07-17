@@ -12,3 +12,7 @@ src/manifest.json
 .grepai/
 .claude/
 .devcontainer/
+.hypothesis/
+schemathesis-report/
+*.har
+junit-*.xml

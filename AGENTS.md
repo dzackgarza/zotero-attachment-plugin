@@ -8,10 +8,13 @@ README must not duplicate schemas; only link to `openapi.yaml`.
 Change in `src/bootstrap.ts` to `runWrite`'s `operation` switch, handler's required/optional fields, or response payload fields → matching `openapi.yaml` edit, same diff (new/changed operation schema, updated `mapping` + `oneOf` entries in `WriteRequest`, updated `VersionResponse`/`AttachSuccessResponse` as needed).
 No new/changed `case` in `runWrite`, or field read via `data.<field>`, without matching `openapi.yaml` update same diff.
 
+The executable enforcement is `bun run openapi:contract` (`tests/openapi-contract.test.ts`), which parses `src/bootstrap.ts` with the TypeScript compiler API and asserts the switch cases, handler field reads, and `successResult` calls match `openapi.yaml` 1:1. The prose rule above is a reminder; the test is the authority.
+
 Validate before commit:
 
 ```bash
-npx --yes @redocly/cli lint openapi.yaml
+bun run openapi:lint
+bun run openapi:contract
 ```
 
 ## Local Zotero Runtime Proof
