@@ -355,10 +355,9 @@ async function materializeUploadBytes(fileName: string, fileBytesBase64: string)
 
 async function importStoredAttachment(
   parentItem: Zotero.Item,
-  filePath: string,
+  resolvedFilePath: string,
   title: string,
 ): Promise<Zotero.Item> {
-  const resolvedFilePath = resolveAttachFilePath(filePath);
   // Copy the file into Zotero's own temp directory before importing.
   // Passing a /tmp path directly causes NS_ERROR_FILE_NOT_FOUND from
   // nsIFile.copyToFollowingLinks when the path resolves through a symlink
@@ -409,7 +408,11 @@ async function handleFulltextAttach(data: RequestData) {
   try {
     if (filePath) {
       try {
-        attachment = await importStoredAttachment(parentItem, filePath, title);
+        attachment = await importStoredAttachment(
+          parentItem,
+          resolveAttachFilePath(filePath),
+          title,
+        );
       } catch (error) {
         if (!fileBytesBase64 || !isMissingFileError(error)) {
           throw error;
