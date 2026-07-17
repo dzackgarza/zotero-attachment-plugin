@@ -299,7 +299,12 @@ function resolveAttachFilePath(filePath: string): string {
     return allowedDir;
   });
   const isAllowed = () =>
-    allowedDirs.some((allowedDir) => allowedDir.equals(file) || allowedDir.contains(file));
+    allowedDirs.some((allowedDir) => {
+      if (allowedDir.equals(file)) {
+        return true;
+      }
+      return allowedDir.contains(file);
+    });
   if (!isAllowed()) {
     throw new Error(
       "File path must be within allowed directories: " + FULLTEXT_ALLOWED_DIRS.join(", "),
@@ -318,11 +323,13 @@ function resolveAttachFilePath(filePath: string): string {
 }
 
 function isMissingFileError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    (error.message.startsWith("File not found: ") ||
-      error.message.includes("NS_ERROR_FILE_NOT_FOUND"))
-  );
+  if (!(error instanceof Error)) {
+    return false;
+  }
+  if (error.message.startsWith("File not found: ")) {
+    return true;
+  }
+  return error.message.includes("NS_ERROR_FILE_NOT_FOUND");
 }
 
 async function materializeUploadBytes(fileName: string, fileBytesBase64: string) {
