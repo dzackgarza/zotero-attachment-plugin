@@ -17,10 +17,11 @@ function setCollectionParentKey(collection: Zotero.Collection, parentKey: string
 // removeFromLibrary against its real two-argument contract.
 function removeTagsFromUserLibrary(libraryID: number, tagIDs: number[]): Promise<void> {
   const remove = Zotero.Tags.removeFromLibrary as (
+    this: typeof Zotero.Tags,
     libraryID: number,
     tagIDs: number[],
   ) => Promise<void>;
-  return remove(libraryID, tagIDs);
+  return remove.call(Zotero.Tags, libraryID, tagIDs);
 }
 
 // A Zotero HTTP endpoint is registered as a constructor function whose prototype carries
@@ -89,6 +90,11 @@ type SearchTranslator = {
 type SyncRunner = {
   sync(options: { background: boolean }): Promise<unknown>;
 };
+type PutContentsAsync = (
+  path: string | nsIFile,
+  data: string | nsIInputStream | ArrayBuffer | Blob,
+  charset?: string,
+) => Promise<void>;
 type AsyncFunctionConstructor = new (
   ...args: string[]
 ) => (zotero: typeof Zotero) => Promise<unknown>;
@@ -292,8 +298,9 @@ async function materializeUploadBytes(fileName: string, fileBytesBase64: string)
     bytes[index] = binary.charCodeAt(index);
   }
   // Zotero.File.putContentsAsync() accepts Blob at runtime, but zotero-types
-  // only advertises string | ArrayBuffer | nsIInputStream.
-  await Zotero.File.putContentsAsync(tempDir.path, bytes.buffer);
+  // omits it from the declared input union.
+  const putContentsAsync = Zotero.File.putContentsAsync as PutContentsAsync;
+  await putContentsAsync(tempDir.path, new Blob([bytes]));
   return tempDir.path;
 }
 
