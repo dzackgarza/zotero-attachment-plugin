@@ -270,6 +270,17 @@ async function cloneChildAttachmentToParent(
 
 function resolveAttachFilePath(filePath: string): string {
   const file = Zotero.File.pathToFile(filePath);
+  file.normalize();
+  const allowed = FULLTEXT_ALLOWED_DIRS.some((dir) => {
+    const allowedDir = Zotero.File.pathToFile(dir);
+    allowedDir.normalize();
+    return allowedDir.equals(file) || allowedDir.contains(file);
+  });
+  if (!allowed) {
+    throw new Error(
+      "File path must be within allowed directories: " + FULLTEXT_ALLOWED_DIRS.join(", "),
+    );
+  }
   if (!file.exists()) {
     throw new Error("File not found: " + filePath);
   }
@@ -278,8 +289,9 @@ function resolveAttachFilePath(filePath: string): string {
 
 function isMissingFileError(error: unknown): boolean {
   return (
-    typeof (error as Error).message === "string" &&
-    (error as Error).message.includes("NS_ERROR_FILE_NOT_FOUND")
+    error instanceof Error &&
+    (error.message.startsWith("File not found: ") ||
+      error.message.includes("NS_ERROR_FILE_NOT_FOUND"))
   );
 }
 
@@ -359,11 +371,6 @@ async function handleFulltextAttach(data: RequestData) {
 
   try {
     if (filePath) {
-      if (!FULLTEXT_ALLOWED_DIRS.some((dir) => filePath.startsWith(dir))) {
-        throw new Error(
-          "File path must be within allowed directories: " + FULLTEXT_ALLOWED_DIRS.join(", "),
-        );
-      }
       try {
         attachment = await importStoredAttachment(parentItem, filePath, title);
       } catch (error) {

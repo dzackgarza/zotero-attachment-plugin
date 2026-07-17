@@ -8,7 +8,7 @@ type Schema = {
   anyOf?: Array<{ $ref: string }>;
   discriminator?: { mapping: Record<string, string> };
   oneOf?: Array<{ $ref: string }>;
-  properties?: Record<string, Schema & { enum?: string[] }>;
+  properties?: Record<string, Schema & { const?: unknown; enum?: string[] }>;
   required?: string[];
 };
 
@@ -76,6 +76,8 @@ test("OpenAPI contract tracks runtime metadata and every write operation", () =>
 
 test("OpenAPI contract marks guaranteed response fields as required", () => {
   let schemas = parseYaml<OpenAPI>("openapi.yaml").components.schemas;
+  let writeRequest = schemas.WriteRequest;
+  let writeResponse = schemas.WriteSuccessResponse;
 
   expect(schemas.SuccessEnvelope.required).toEqual([
     "success",
@@ -85,6 +87,8 @@ test("OpenAPI contract marks guaranteed response fields as required", () => {
     "details",
   ]);
   expect(schemas.AttachSuccessResponse.allOf?.[1].required).toEqual([
+    "operation",
+    "details",
     "attachment_key",
     "attachment_id",
     "message",
@@ -100,6 +104,21 @@ test("OpenAPI contract marks guaranteed response fields as required", () => {
     "strict_max_version",
     "tested_zotero_version",
   ]);
+  expect(Object.keys(writeResponse.discriminator!.mapping).sort()).toEqual(
+    Object.keys(writeRequest.discriminator!.mapping).sort(),
+  );
+  expect(
+    writeResponse.oneOf!.map((entry) => entry.$ref).sort(),
+  ).toEqual(Object.values(writeResponse.discriminator!.mapping).sort());
+
+  for (let [operation, reference] of Object.entries(writeResponse.discriminator!.mapping)) {
+    let schemaName = reference.split("/").at(-1)!;
+    let operationSchema = schemas[schemaName].allOf?.[1];
+    expect(operationSchema!.required).toContain("operation");
+    expect(operationSchema!.required).toContain("details");
+    expect(operationSchema!.properties!.operation.const).toBe(operation);
+    expect(operationSchema!.properties!.details.required).toBeArray();
+  }
 });
 
 test("attachment contract accepts path requests with byte fallback", () => {

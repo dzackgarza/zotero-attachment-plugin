@@ -147,11 +147,9 @@ def compile_typescript() -> None:
     result = subprocess.run(
         [
             "bun",
-            "x",
-            "esbuild",
-            "src/bootstrap.ts",
-            "--outfile=src/bootstrap.js",
-            "--target=firefox115",
+            "run",
+            "build",
+            "--",
             *defines,
         ],
         cwd=ROOT,
