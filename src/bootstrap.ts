@@ -268,21 +268,51 @@ async function cloneChildAttachmentToParent(
   return newAttachment;
 }
 
+function lexicalFile(filePath: string): nsIFile {
+  if (!PathUtils.isAbsolute(filePath)) {
+    throw new Error("File path must be absolute: " + filePath);
+  }
+  const components = PathUtils.split(filePath);
+  const fileRoot = Zotero.File.pathToFile(components[0]);
+  let file = fileRoot.clone();
+  for (const component of components.slice(1)) {
+    if (component === ".") {
+      continue;
+    }
+    if (component === "..") {
+      if (file.equals(fileRoot)) {
+        throw new Error("File path traverses above its root: " + filePath);
+      }
+      file = file.parent;
+      continue;
+    }
+    file.append(component);
+  }
+  return file;
+}
+
 function resolveAttachFilePath(filePath: string): string {
-  const file = Zotero.File.pathToFile(filePath);
-  file.normalize();
-  const allowed = FULLTEXT_ALLOWED_DIRS.some((dir) => {
+  const file = lexicalFile(filePath);
+  const allowedDirs = FULLTEXT_ALLOWED_DIRS.map((dir) => {
     const allowedDir = Zotero.File.pathToFile(dir);
     allowedDir.normalize();
-    return allowedDir.equals(file) || allowedDir.contains(file);
+    return allowedDir;
   });
-  if (!allowed) {
+  const isAllowed = () =>
+    allowedDirs.some((allowedDir) => allowedDir.equals(file) || allowedDir.contains(file));
+  if (!isAllowed()) {
     throw new Error(
       "File path must be within allowed directories: " + FULLTEXT_ALLOWED_DIRS.join(", "),
     );
   }
   if (!file.exists()) {
-    throw new Error("File not found: " + filePath);
+    throw new Error("File not found: " + file.path);
+  }
+  file.normalize();
+  if (!isAllowed()) {
+    throw new Error(
+      "File path must be within allowed directories: " + FULLTEXT_ALLOWED_DIRS.join(", "),
+    );
   }
   return file.path;
 }
@@ -1145,6 +1175,10 @@ async function handleUpdateAttachmentTitle(data: RequestData) {
   });
 }
 
+function serializeResult(result: unknown): unknown {
+  return result === undefined ? null : JSON.parse(JSON.stringify(result));
+}
+
 async function handleSync(data: RequestData) {
   void data;
   const syncApi = Zotero.Sync as { Runner?: SyncRunner };
@@ -1154,8 +1188,7 @@ async function handleSync(data: RequestData) {
   }
   // Foreground sync so the call resolves once the sync engine has run.
   const result = await runner.sync({ background: false });
-  const serialized: unknown = JSON.parse(JSON.stringify(result));
-  return successResult("sync", { triggered: true, result: serialized });
+  return successResult("sync", { triggered: true, result: serializeResult(result) });
 }
 
 function createAsyncFunction(code: string): (zotero: typeof Zotero) => Promise<unknown> {
@@ -1177,8 +1210,7 @@ async function handleRunJavascript(data: RequestData) {
   // chrome scope, with `Zotero` in scope and `await` supported. Single-user dev tool.
   const code = requireNonEmptyString(data.code, "code");
   const result = await createAsyncFunction(code)(Zotero);
-  const serialized: unknown = JSON.parse(JSON.stringify(result));
-  return successResult("run_javascript", { result: serialized });
+  return successResult("run_javascript", { result: serializeResult(result) });
 }
 
 async function runWrite(data: RequestData) {
