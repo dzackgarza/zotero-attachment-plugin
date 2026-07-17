@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 import subprocess
 import zipfile
 from pathlib import Path
@@ -47,20 +46,7 @@ UPDATE_MANIFEST_URL = (
 XPI_FILENAME = f"{ADDON_SLUG}-{VERSION}.xpi"
 XPI_URL = f"https://github.com/{REPO_OWNER}/{REPO_NAME}/releases/download/v{VERSION}/{XPI_FILENAME}"
 
-BOOTSTRAP_VAR_PATTERNS = {
-    "PLUGIN_VERSION": re.compile(r"(?:var|const|let) PLUGIN_VERSION = .*?;"),
-    "FULLTEXT_ATTACH_PATH": re.compile(r"(?:var|const|let) FULLTEXT_ATTACH_PATH = .*?;"),
-    "LOCAL_WRITE_PATH": re.compile(r"(?:var|const|let) LOCAL_WRITE_PATH = .*?;"),
-    "VERSION_PATH": re.compile(r"(?:var|const|let) VERSION_PATH = .*?;"),
-    "FULLTEXT_ALLOWED_DIRS": re.compile(r"(?:var|const|let) FULLTEXT_ALLOWED_DIRS = .*?;"),
-    "ADDON_ID": re.compile(r"(?:var|const|let) ADDON_ID = .*?;"),
-    "HOMEPAGE_URL": re.compile(r"(?:var|const|let) HOMEPAGE_URL = .*?;"),
-    "UPDATE_URL": re.compile(r"(?:var|const|let) UPDATE_URL = .*?;"),
-    "STRICT_MIN_VERSION": re.compile(r"(?:var|const|let) STRICT_MIN_VERSION = .*?;"),
-    "STRICT_MAX_VERSION": re.compile(r"(?:var|const|let) STRICT_MAX_VERSION = .*?;"),
-    "TESTED_ZOTERO_VERSION": re.compile(r"(?:var|const|let) TESTED_ZOTERO_VERSION = .*?;"),
-}
-BOOTSTRAP_VAR_VALUES = {
+ESBUILD_DEFINES = {
     "PLUGIN_VERSION": VERSION,
     "FULLTEXT_ATTACH_PATH": ATTACH_PATH,
     "LOCAL_WRITE_PATH": WRITE_PATH,
@@ -77,19 +63,6 @@ BOOTSTRAP_VAR_VALUES = {
 
 def write_json(path: Path, payload: dict[str, object]) -> None:
     path.write_text(f"{json.dumps(payload, indent=2, sort_keys=True)}\n")
-
-
-def update_bootstrap_metadata() -> None:
-    source = BOOTSTRAP_PATH.read_text()
-    for var, pattern in BOOTSTRAP_VAR_PATTERNS.items():
-        source, n = pattern.subn(
-            f"const {var} = {json.dumps(BOOTSTRAP_VAR_VALUES[var])};",
-            source,
-            count=1,
-        )
-        if n != 1:
-            raise RuntimeError(f"Could not update {var} in bootstrap.js")
-    BOOTSTRAP_PATH.write_text(source)
 
 
 def build_manifest() -> dict[str, object]:
@@ -167,8 +140,20 @@ def remove_old_xpis() -> None:
 
 
 def compile_typescript() -> None:
+    defines = [
+        f"--define:{name}={json.dumps(value, separators=(',', ':'))}"
+        for name, value in ESBUILD_DEFINES.items()
+    ]
     result = subprocess.run(
-        ["bun", "run", "build"],
+        [
+            "bun",
+            "x",
+            "esbuild",
+            "src/bootstrap.ts",
+            "--outfile=src/bootstrap.js",
+            "--target=firefox115",
+            *defines,
+        ],
         cwd=ROOT,
         capture_output=True,
         text=True,
@@ -184,7 +169,6 @@ def build() -> Path:
     print(f"Tested target: Zotero {TESTED_ZOTERO_VERSION}")
 
     compile_typescript()
-    update_bootstrap_metadata()
     manifest = build_manifest()
     write_json(SRC / "manifest.json", manifest)
     remove_old_xpis()
