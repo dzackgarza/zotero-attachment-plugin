@@ -6,9 +6,13 @@
 ## Issue-scoped lifecycle gate — required
 
 - [ ] Linked triaged issue(s): #____
+
 - [ ] This PR started as a draft while implementation/proof was in progress.
+
 - [ ] The PR scope maps to the linked issue acceptance criteria; unrelated issue families are excluded.
+
 - [ ] Ready-for-review was requested only after the policy alignment gate and evidence below were complete.
+
 - [ ] Returned review feedback followed [pr-feedback-triage](https://github.com/dzackgarza/ai-review-ci/blob/main/skills/pr-feedback-triage/SKILL.md): every resolved substantive item carries its own evidenced disposition, and accepted or modified feedback cites committed remediation and proof.
 
 ## Policy alignment gate — required
@@ -22,7 +26,9 @@ Full rationale: AGENTS.md → **Policy Alignment Gate** and the wiki [Policy Ali
 
 - [ ] Loaded the canonical `POLICY.*` records.
   Codes this change touches or risks: `POLICY.____`
+
 - [ ] No **Invalid local fix** introduced — no new fallback, runtime default, optional core-state, swallowed error, or partial-success path that makes required work look successful after it should fail loudly.
+
 - [ ] No empty/falsy-literal fallback (`""`, `[]`, `{}`, `null`, `false`, `0`) added or reclassified as "safe."
   Optional state is an explicit typed state at the boundary.
 
