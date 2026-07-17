@@ -121,6 +121,10 @@ function successResult(operation: string, details: JsonPayload, extra?: JsonPayl
   return extra ? { ...payload, ...extra } : payload;
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 function errorResult(
   operation: string,
   stage: string,
@@ -1324,7 +1328,7 @@ async function startup({
         log("Received POST request to " + FULLTEXT_ATTACH_PATH + " [v" + PLUGIN_VERSION + "]");
         sendJSON(sendResponse, 200, await handleFulltextAttach(data));
       } catch (error) {
-        const msg = (error as Error).message;
+        const msg = errorMessage(error);
         log("Error in " + FULLTEXT_ATTACH_PATH + " [v" + PLUGIN_VERSION + "]: " + msg);
         sendJSON(
           sendResponse,
@@ -1347,7 +1351,7 @@ async function startup({
         log("Received POST request to " + LOCAL_WRITE_PATH + " [operation=" + operationLabel + "]");
         sendJSON(sendResponse, 200, await runWrite(data));
       } catch (error) {
-        const msg = (error as Error).message;
+        const msg = errorMessage(error);
         log("Error in " + LOCAL_WRITE_PATH + " [operation=" + operationLabel + "]: " + msg);
         sendJSON(
           sendResponse,
