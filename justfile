@@ -172,6 +172,85 @@ _default-profile-dir:
     else:
         sys.exit(f"no Default=1 profile with a Path in {ini}")
 
+# Provision (idempotently) a disposable Zotero profile + empty data directory
+# for the mutating fuzz, and print `NAME<TAB>DIR<TAB>DATADIR`. Does NOT touch the
+# Default=1 profile and does NOT start Zotero — the caller boots it via
+# `ZOTERO_PROFILE_NAME=<name> ZOTERO_PROFILE_DIR=<dir> just install-live` and
+# then approves the sideloaded add-on with `_approve-sideloaded-addon`.
+#
+# ZOTERO_ROOT overrides ~/.zotero so the file surgery can be tested off to the
+# side. profiles.ini is written with case preserved because Mozilla's
+# nsINIParser is case-sensitive (Name/Path/Default), unlike configparser.
+[private]
+_provision-disposable-profile name="lw-fuzz":
+    #!/usr/bin/env python3
+    import configparser, os, pathlib
+    root = pathlib.Path(os.environ.get("ZOTERO_ROOT", pathlib.Path.home() / ".zotero"))
+    name = "{{name}}"
+    profile_dir = root / "zotero" / f"{name}-disposable"
+    data_dir = root / f"{name}-data"
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    ini = root / "zotero" / "profiles.ini"
+    cfg = configparser.ConfigParser()
+    cfg.optionxform = str
+    if ini.is_file():
+        cfg.read(ini)
+    # Reuse an existing section for this profile name, else the next free slot.
+    section = next(
+        (s for s in cfg.sections()
+         if s.startswith("Profile") and cfg[s].get("Name") == name),
+        None,
+    )
+    if section is None:
+        i = 0
+        while cfg.has_section(f"Profile{i}"):
+            i += 1
+        section = f"Profile{i}"
+        cfg.add_section(section)
+    cfg[section]["Name"] = name
+    cfg[section]["IsRelative"] = "0"
+    cfg[section]["Path"] = str(profile_dir)
+    cfg[section].pop("Default", None)  # never the default profile
+    with open(ini, "w") as f:
+        cfg.write(f, space_around_delimiters=False)
+
+    # Disposable library + local API on; no sync credentials, so this profile
+    # cannot reach the online library.
+    (profile_dir / "prefs.js").write_text(
+        f'user_pref("extensions.zotero.dataDir", "{data_dir}");\n'
+        'user_pref("extensions.zotero.useDataDir", true);\n'
+        'user_pref("extensions.zotero.httpServer.enabled", true);\n'
+        'user_pref("extensions.zotero.httpServer.localAPI.enabled", true);\n'
+        'user_pref("extensions.zotero.firstRun2", false);\n'
+        'user_pref("extensions.zotero.firstRun.skipFirefoxProfileAccessCheck", true);\n'
+    )
+    print(f"{name}\t{profile_dir}\t{data_dir}")
+
+# Approve the add-on that Zotero registered as a disabled sideload on first
+# boot of a fresh profile, so a second boot activates it. No-op until Zotero has
+# created extensions.json. addon_id defaults to this add-on.
+[private]
+_approve-sideloaded-addon profile_dir addon_id="local-write-api@dzackgarza.com":
+    #!/usr/bin/env python3
+    import json, pathlib, sys
+    p = pathlib.Path("{{profile_dir}}") / "extensions.json"
+    if not p.is_file():
+        sys.exit(f"{p} does not exist yet; boot Zotero on this profile once first")
+    data = json.loads(p.read_text())
+    hit = False
+    for addon in data.get("addons", []):
+        if addon.get("id") == "{{addon_id}}":
+            addon["active"] = True
+            addon["userDisabled"] = False
+            addon["seen"] = True
+            hit = True
+    if not hit:
+        sys.exit(f"{{addon_id}} not registered in {p}; did install-live copy the XPI?")
+    p.write_text(json.dumps(data))
+    print(f"approved {{addon_id}} in {p}")
+
 # Static OpenAPI contract check (lint + generated-drift + dispatch conformance)
 openapi-check:
     bun run openapi:check
