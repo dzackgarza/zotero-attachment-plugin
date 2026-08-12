@@ -56,18 +56,6 @@ function createTranslateSearch(): ZoteroTranslateSearchApi {
   return new TranslateSearch();
 }
 
-// zotero-types types putContentsAsync's data as string | nsIInputStream |
-// ArrayBuffer. That is wrong in both directions: file.js duck-types a Blob
-// (data.size + data.slice) and passes anything else straight to
-// NetUtil.asyncCopy, which needs an nsIInputStream, so a bare ArrayBuffer fails.
-// It is a property rather than a method, so no overload can be merged in.
-// This is the real signature, from zotero/zotero
-// chrome/content/zotero/xpcom/file.js putContentsAsync.
-type PutContentsAsyncApi = (
-  path: string,
-  data: string | Blob | nsIInputStream,
-) => Promise<void>;
-
 // Zotero.Sync.Runner is under-modeled for the foreground sync call.
 type ZoteroSyncRunnerApi = {
   sync(options: { background: boolean }): Promise<unknown>;
@@ -404,12 +392,19 @@ async function materializeUploadBytes(
   for (let index = 0; index < binary.length; index++) {
     bytes[index] = binary.charCodeAt(index);
   }
-  // Zotero.File.putContentsAsync() accepts Blob at runtime, but zotero-types
-  // only advertises string | ArrayBuffer | nsIInputStream.
-  await (Zotero.File.putContentsAsync as PutContentsAsyncApi)(
-    tempDir.path,
-    new Blob([bytes]),
-  );
+  // Mirrors putContentsAsync's own Blob handling (zotero/zotero
+  // chrome/content/zotero/xpcom/file.js:411): it converts a Blob to an
+  // nsIArrayBufferInputStream because NetUtil.asyncCopy needs a real stream.
+  // Building the stream here hits the declared nsIInputStream signature
+  // directly; the advertised ArrayBuffer does not work at runtime.
+  // lib.gecko.xpcom.d.ts models Components.classes as an empty interface with
+  // no contract-ID index, so this is the single owned site that indexes it;
+  // nsIFactory carries the generic createInstance the real nsIJSCID exposes.
+  let stream = (Components.classes as Record<string, nsIFactory>)[
+    "@mozilla.org/io/arraybuffer-input-stream;1"
+  ].createInstance(Components.interfaces.nsIArrayBufferInputStream);
+  stream.setData(bytes.buffer, 0, bytes.byteLength);
+  await Zotero.File.putContentsAsync(tempDir.path, stream);
   return tempDir.path;
 }
 
