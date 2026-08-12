@@ -397,12 +397,9 @@ async function materializeUploadBytes(
   // nsIArrayBufferInputStream because NetUtil.asyncCopy needs a real stream.
   // Building the stream here hits the declared nsIInputStream signature
   // directly; the advertised ArrayBuffer does not work at runtime.
-  // lib.gecko.xpcom.d.ts models Components.classes as an empty interface with
-  // no contract-ID index, so this is the single owned site that indexes it;
-  // nsIFactory carries the generic createInstance the real nsIJSCID exposes.
-  let stream = (Components.classes as Record<string, nsIFactory>)[
-    "@mozilla.org/io/arraybuffer-input-stream;1"
-  ].createInstance(Components.interfaces.nsIArrayBufferInputStream);
+  let stream = Cc["@mozilla.org/io/arraybuffer-input-stream;1"].createInstance(
+    Ci.nsIArrayBufferInputStream,
+  );
   stream.setData(bytes.buffer, 0, bytes.byteLength);
   await Zotero.File.putContentsAsync(tempDir.path, stream);
   return tempDir.path;
