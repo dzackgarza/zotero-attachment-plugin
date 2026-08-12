@@ -393,6 +393,8 @@ components:
         - $ref: '#/components/schemas/ImportBibtexRequest'
         - $ref: '#/components/schemas/ImportByIdentifierRequest'
         - $ref: '#/components/schemas/GetSelectedCollectionRequest'
+        - $ref: '#/components/schemas/FindItemsByTitleRequest'
+        - $ref: '#/components/schemas/GetItemChildrenRequest'
         - $ref: '#/components/schemas/RestoreItemRequest'
         - $ref: '#/components/schemas/UpdateAttachmentTitleRequest'
       discriminator:
@@ -428,6 +430,8 @@ components:
           import_bibtex: '#/components/schemas/ImportBibtexRequest'
           import_by_identifier: '#/components/schemas/ImportByIdentifierRequest'
           get_selected_collection: '#/components/schemas/GetSelectedCollectionRequest'
+          find_items_by_title: '#/components/schemas/FindItemsByTitleRequest'
+          get_item_children: '#/components/schemas/GetItemChildrenRequest'
           restore_item: '#/components/schemas/RestoreItemRequest'
           update_attachment_title: '#/components/schemas/UpdateAttachmentTitleRequest'
 
@@ -835,6 +839,28 @@ components:
         operation:
           const: get_selected_collection
 
+    FindItemsByTitleRequest:
+      type: object
+      required:
+        - operation
+        - title
+      properties:
+        operation:
+          const: find_items_by_title
+        title:
+          $ref: '#/components/schemas/NonBlankString'
+
+    GetItemChildrenRequest:
+      type: object
+      required:
+        - operation
+        - item_key
+      properties:
+        operation:
+          const: get_item_children
+        item_key:
+          $ref: '#/components/schemas/ItemKey'
+
     RestoreItemRequest:
       type: object
       required:
@@ -894,6 +920,8 @@ components:
         - $ref: '#/components/schemas/ImportBibtexSuccess'
         - $ref: '#/components/schemas/ImportByIdentifierSuccess'
         - $ref: '#/components/schemas/GetSelectedCollectionSuccess'
+        - $ref: '#/components/schemas/FindItemsByTitleSuccess'
+        - $ref: '#/components/schemas/GetItemChildrenSuccess'
         - $ref: '#/components/schemas/RestoreItemSuccess'
         - $ref: '#/components/schemas/UpdateAttachmentTitleSuccess'
       discriminator:
@@ -929,6 +957,8 @@ components:
           import_bibtex: '#/components/schemas/ImportBibtexSuccess'
           import_by_identifier: '#/components/schemas/ImportByIdentifierSuccess'
           get_selected_collection: '#/components/schemas/GetSelectedCollectionSuccess'
+          find_items_by_title: '#/components/schemas/FindItemsByTitleSuccess'
+          get_item_children: '#/components/schemas/GetItemChildrenSuccess'
           restore_item: '#/components/schemas/RestoreItemSuccess'
           update_attachment_title: '#/components/schemas/UpdateAttachmentTitleSuccess'
 
@@ -1620,6 +1650,120 @@ components:
                 collection_name:
                   type: string
       unevaluatedProperties: false
+
+    FindItemsByTitleSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            operation:
+              const: find_items_by_title
+            details:
+              type: object
+              required:
+                - query
+                - match_count
+                - items
+              properties:
+                query:
+                  type: string
+                match_count:
+                  type: integer
+                items:
+                  type: array
+                  items:
+                    type: object
+                    required:
+                      - item_key
+                      - item_id
+                      - item_type
+                      - title
+                      - date
+                    properties:
+                      item_key:
+                        type: string
+                      item_id:
+                        type: integer
+                      item_type:
+                        type: string
+                      title:
+                        type: string
+                      date:
+                        type: string
+      unevaluatedProperties: false
+
+    GetItemChildrenSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            operation:
+              const: get_item_children
+            details:
+              type: object
+              required:
+                - parent_item_key
+                - child_count
+                - children
+              properties:
+                parent_item_key:
+                  type: string
+                child_count:
+                  type: integer
+                children:
+                  type: array
+                  items:
+                    oneOf:
+                      - $ref: '#/components/schemas/AttachmentChild'
+                      - $ref: '#/components/schemas/NoteChild'
+                    discriminator:
+                      propertyName: child_type
+      unevaluatedProperties: false
+
+    AttachmentChild:
+      type: object
+      required:
+        - item_key
+        - item_id
+        - title
+        - child_type
+        - content_type
+        - link_mode
+        - local_path
+      properties:
+        item_key:
+          type: string
+        item_id:
+          type: integer
+        title:
+          type: string
+        child_type:
+          const: attachment
+        content_type:
+          type: string
+        link_mode:
+          type: integer
+        local_path:
+          type:
+            - string
+            - 'null'
+
+    NoteChild:
+      type: object
+      required:
+        - item_key
+        - item_id
+        - title
+        - child_type
+      properties:
+        item_key:
+          type: string
+        item_id:
+          type: integer
+        title:
+          type: string
+        child_type:
+          const: note
 
     RestoreItemSuccess:
       allOf:

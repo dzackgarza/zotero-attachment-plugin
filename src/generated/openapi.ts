@@ -139,7 +139,7 @@ export interface components {
                 title: string;
             };
         };
-        WriteRequest: components["schemas"]["SyncRequest"] | components["schemas"]["RunJavascriptRequest"] | components["schemas"]["UpdateItemFieldsRequest"] | components["schemas"]["ReplaceItemJsonRequest"] | components["schemas"]["SetItemTagsRequest"] | components["schemas"]["AddItemTagsRequest"] | components["schemas"]["RemoveItemTagsRequest"] | components["schemas"]["SetItemCollectionsRequest"] | components["schemas"]["AddItemToCollectionRequest"] | components["schemas"]["RemoveItemFromCollectionRequest"] | components["schemas"]["AttachNoteRequest"] | components["schemas"]["UpdateNoteRequest"] | components["schemas"]["AttachUrlRequest"] | components["schemas"]["TrashItemRequest"] | components["schemas"]["TrashCollectionRequest"] | components["schemas"]["RelinkAttachmentFileRequest"] | components["schemas"]["CreateCollectionRequest"] | components["schemas"]["RenameCollectionRequest"] | components["schemas"]["MoveCollectionRequest"] | components["schemas"]["MergeCollectionsRequest"] | components["schemas"]["RenameTagRequest"] | components["schemas"]["MergeTagsRequest"] | components["schemas"]["DeleteTagRequest"] | components["schemas"]["DeleteUnusedTagsRequest"] | components["schemas"]["CopyItemRequest"] | components["schemas"]["MergeItemsRequest"] | components["schemas"]["CreateItemRequest"] | components["schemas"]["ImportBibtexRequest"] | components["schemas"]["ImportByIdentifierRequest"] | components["schemas"]["GetSelectedCollectionRequest"] | components["schemas"]["RestoreItemRequest"] | components["schemas"]["UpdateAttachmentTitleRequest"];
+        WriteRequest: components["schemas"]["SyncRequest"] | components["schemas"]["RunJavascriptRequest"] | components["schemas"]["UpdateItemFieldsRequest"] | components["schemas"]["ReplaceItemJsonRequest"] | components["schemas"]["SetItemTagsRequest"] | components["schemas"]["AddItemTagsRequest"] | components["schemas"]["RemoveItemTagsRequest"] | components["schemas"]["SetItemCollectionsRequest"] | components["schemas"]["AddItemToCollectionRequest"] | components["schemas"]["RemoveItemFromCollectionRequest"] | components["schemas"]["AttachNoteRequest"] | components["schemas"]["UpdateNoteRequest"] | components["schemas"]["AttachUrlRequest"] | components["schemas"]["TrashItemRequest"] | components["schemas"]["TrashCollectionRequest"] | components["schemas"]["RelinkAttachmentFileRequest"] | components["schemas"]["CreateCollectionRequest"] | components["schemas"]["RenameCollectionRequest"] | components["schemas"]["MoveCollectionRequest"] | components["schemas"]["MergeCollectionsRequest"] | components["schemas"]["RenameTagRequest"] | components["schemas"]["MergeTagsRequest"] | components["schemas"]["DeleteTagRequest"] | components["schemas"]["DeleteUnusedTagsRequest"] | components["schemas"]["CopyItemRequest"] | components["schemas"]["MergeItemsRequest"] | components["schemas"]["CreateItemRequest"] | components["schemas"]["ImportBibtexRequest"] | components["schemas"]["ImportByIdentifierRequest"] | components["schemas"]["GetSelectedCollectionRequest"] | components["schemas"]["FindItemsByTitleRequest"] | components["schemas"]["GetItemChildrenRequest"] | components["schemas"]["RestoreItemRequest"] | components["schemas"]["UpdateAttachmentTitleRequest"];
         SyncRequest: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -413,6 +413,22 @@ export interface components {
              */
             operation: "get_selected_collection";
         };
+        FindItemsByTitleRequest: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            operation: "find_items_by_title";
+            title: components["schemas"]["NonBlankString"];
+        };
+        GetItemChildrenRequest: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            operation: "get_item_children";
+            item_key: components["schemas"]["ItemKey"];
+        };
         RestoreItemRequest: {
             /**
              * @description discriminator enum property added by openapi-typescript
@@ -430,7 +446,7 @@ export interface components {
             attachment_key: components["schemas"]["ItemKey"];
             new_title: components["schemas"]["NonBlankString"];
         };
-        WriteSuccessResponse: components["schemas"]["SyncSuccess"] | components["schemas"]["RunJavascriptSuccess"] | components["schemas"]["UpdateItemFieldsSuccess"] | components["schemas"]["ReplaceItemJsonSuccess"] | components["schemas"]["SetItemTagsSuccess"] | components["schemas"]["AddItemTagsSuccess"] | components["schemas"]["RemoveItemTagsSuccess"] | components["schemas"]["SetItemCollectionsSuccess"] | components["schemas"]["AddItemToCollectionSuccess"] | components["schemas"]["RemoveItemFromCollectionSuccess"] | components["schemas"]["AttachNoteSuccess"] | components["schemas"]["UpdateNoteSuccess"] | components["schemas"]["AttachUrlSuccess"] | components["schemas"]["TrashItemSuccess"] | components["schemas"]["TrashCollectionSuccess"] | components["schemas"]["RelinkAttachmentFileSuccess"] | components["schemas"]["CreateCollectionSuccess"] | components["schemas"]["RenameCollectionSuccess"] | components["schemas"]["MoveCollectionSuccess"] | components["schemas"]["MergeCollectionsSuccess"] | components["schemas"]["RenameTagSuccess"] | components["schemas"]["MergeTagsSuccess"] | components["schemas"]["DeleteTagSuccess"] | components["schemas"]["DeleteUnusedTagsSuccess"] | components["schemas"]["CopyItemSuccess"] | components["schemas"]["MergeItemsSuccess"] | components["schemas"]["CreateItemSuccess"] | components["schemas"]["ImportBibtexSuccess"] | components["schemas"]["ImportByIdentifierSuccess"] | components["schemas"]["GetSelectedCollectionSuccess"] | components["schemas"]["RestoreItemSuccess"] | components["schemas"]["UpdateAttachmentTitleSuccess"];
+        WriteSuccessResponse: components["schemas"]["SyncSuccess"] | components["schemas"]["RunJavascriptSuccess"] | components["schemas"]["UpdateItemFieldsSuccess"] | components["schemas"]["ReplaceItemJsonSuccess"] | components["schemas"]["SetItemTagsSuccess"] | components["schemas"]["AddItemTagsSuccess"] | components["schemas"]["RemoveItemTagsSuccess"] | components["schemas"]["SetItemCollectionsSuccess"] | components["schemas"]["AddItemToCollectionSuccess"] | components["schemas"]["RemoveItemFromCollectionSuccess"] | components["schemas"]["AttachNoteSuccess"] | components["schemas"]["UpdateNoteSuccess"] | components["schemas"]["AttachUrlSuccess"] | components["schemas"]["TrashItemSuccess"] | components["schemas"]["TrashCollectionSuccess"] | components["schemas"]["RelinkAttachmentFileSuccess"] | components["schemas"]["CreateCollectionSuccess"] | components["schemas"]["RenameCollectionSuccess"] | components["schemas"]["MoveCollectionSuccess"] | components["schemas"]["MergeCollectionsSuccess"] | components["schemas"]["RenameTagSuccess"] | components["schemas"]["MergeTagsSuccess"] | components["schemas"]["DeleteTagSuccess"] | components["schemas"]["DeleteUnusedTagsSuccess"] | components["schemas"]["CopyItemSuccess"] | components["schemas"]["MergeItemsSuccess"] | components["schemas"]["CreateItemSuccess"] | components["schemas"]["ImportBibtexSuccess"] | components["schemas"]["ImportByIdentifierSuccess"] | components["schemas"]["GetSelectedCollectionSuccess"] | components["schemas"]["FindItemsByTitleSuccess"] | components["schemas"]["GetItemChildrenSuccess"] | components["schemas"]["RestoreItemSuccess"] | components["schemas"]["UpdateAttachmentTitleSuccess"];
         SyncSuccess: components["schemas"]["SuccessEnvelope"] & {
             /** @constant */
             operation?: "sync";
@@ -875,6 +891,65 @@ export interface components {
              * @enum {string}
              */
             operation: "get_selected_collection";
+        };
+        FindItemsByTitleSuccess: components["schemas"]["SuccessEnvelope"] & {
+            /** @constant */
+            operation?: "find_items_by_title";
+            details?: {
+                query: string;
+                match_count: number;
+                items: {
+                    item_key: string;
+                    item_id: number;
+                    item_type: string;
+                    title: string;
+                    date: string;
+                }[];
+            };
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            operation: "find_items_by_title";
+        };
+        GetItemChildrenSuccess: components["schemas"]["SuccessEnvelope"] & {
+            /** @constant */
+            operation?: "get_item_children";
+            details?: {
+                parent_item_key: string;
+                child_count: number;
+                children: (components["schemas"]["AttachmentChild"] | components["schemas"]["NoteChild"])[];
+            };
+        } & {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            operation: "get_item_children";
+        };
+        AttachmentChild: {
+            item_key: string;
+            item_id: number;
+            title: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            child_type: "AttachmentChild";
+            content_type: string;
+            link_mode: number;
+            local_path: string | null;
+        };
+        NoteChild: {
+            item_key: string;
+            item_id: number;
+            title: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            child_type: "NoteChild";
         };
         RestoreItemSuccess: components["schemas"]["SuccessEnvelope"] & {
             /** @constant */

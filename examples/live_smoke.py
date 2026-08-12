@@ -10,7 +10,9 @@ This script exercises the add-on against a real running Zotero instance:
 - version probe
 - create_item
 - import_bibtex
+- find_items_by_title
 - byte-backed PDF attach
+- get_item_children with an absolute local file path
 - delete_tag
 - trash_item
 
@@ -156,7 +158,15 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     _require("capabilities" in version_payload, f"Version probe did not include capabilities: {version_payload!r}")
     capabilities = version_payload["capabilities"]
     _require(isinstance(capabilities, list), f"Version probe capabilities is not a list: {version_payload!r}")
-    for capability in ("attach", "attach_bytes", "write", "version_probe", "import_bibtex"):
+    for capability in (
+        "attach",
+        "attach_bytes",
+        "write",
+        "version_probe",
+        "import_bibtex",
+        "title_search",
+        "local_attachment_paths",
+    ):
         _require(capability in capabilities, f"Missing required capability {capability!r}: {capabilities!r}")
 
     try:
@@ -189,6 +199,17 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         _require(created_item["data"]["title"] == f"live-smoke-item-{suffix}", f"Unexpected item title: {created_item!r}")
         created_tags = set(_tag_names(created_item))
         _require(created_tags == {doomed_tag, keep_tag}, f"Unexpected initial tags: {created_tags!r}")
+
+        title_search = _post_write(
+            base_url,
+            write_path,
+            {"operation": "find_items_by_title", "title": f"live-smoke-item-{suffix}"},
+        )
+        title_matches = title_search.get("details", {}).get("items", [])
+        _require(
+            any(match.get("item_key") == item_key for match in title_matches),
+            f"find_items_by_title did not return {item_key}: {title_search!r}",
+        )
 
         bibtex_title = f"live-smoke-bibtex-{suffix}"
         bibtex_result = _post_write(
@@ -243,6 +264,20 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             matching_attachment["data"]["title"] == "Live Smoke PDF",
             f"Attachment title mismatch: {matching_attachment!r}",
         )
+
+        item_children = _post_write(
+            base_url,
+            write_path,
+            {"operation": "get_item_children", "item_key": item_key},
+        )
+        api_children = item_children.get("details", {}).get("children", [])
+        api_attachment = next(
+            (child for child in api_children if child.get("item_key") == attachment_key),
+            None,
+        )
+        _require(api_attachment is not None, f"get_item_children omitted {attachment_key}: {item_children!r}")
+        local_path = api_attachment.get("local_path")
+        _require(isinstance(local_path, str) and local_path.startswith("/"), f"Expected absolute local path: {api_attachment!r}")
 
         delete_tag_result = _post_write(
             base_url,

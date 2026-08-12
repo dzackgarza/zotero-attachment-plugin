@@ -70,6 +70,9 @@ test("build emits an update manifest for the exact generated XPI", () => {
     ) as AddonManifest;
     expect(manifestFromXpi).toEqual(manifestFromSource);
 
+    let bootstrapFromXpi = runCommand(["unzip", "-p", xpiName, "bootstrap.js"]);
+    expect(bootstrapFromXpi).toContain(`version: "${version}"`);
+
     let actualHash = createHash("sha256").update(readFileSync(xpiName)).digest("hex");
     let update =
       readJson<UpdatesManifest>("updates.json").addons["local-write-api@dzackgarza.com"].updates[0];

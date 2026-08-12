@@ -2,11 +2,10 @@ import { describe, expect, it } from "bun:test";
 import * as ts from "typescript";
 import * as fs from "fs";
 import * as path from "path";
+import * as yaml from "js-yaml";
 
 // Parse openapi.yaml with a minimal YAML parser (js-yaml is already
 // available as a transitive dependency of redocly).
-const yaml = require("js-yaml");
-
 const REPO_ROOT = path.resolve(import.meta.dir, "..");
 const BOOTSTRAP_PATH = path.join(REPO_ROOT, "src", "bootstrap.ts");
 const OPENAPI_PATH = path.join(REPO_ROOT, "openapi.yaml");
@@ -74,7 +73,9 @@ function findRunWriteSwitch(source: ts.SourceFile): ts.SwitchStatement | null {
           return;
         }
         ts.forEachChild(n, findSwitch);
-        if (result) return;
+        if (result !== null) {
+          return;
+        }
       }
       findSwitch(node);
     }
@@ -93,7 +94,9 @@ function extractSwitchCases(
   const cases: { op: string; handlerName: string }[] = [];
 
   for (const clause of switchStmt.caseBlock.clauses) {
-    if (ts.isDefaultClause(clause)) continue;
+    if (ts.isDefaultClause(clause)) {
+      continue;
+    }
 
     const caseExpr = clause.expression;
     if (!ts.isStringLiteral(caseExpr)) {
@@ -189,7 +192,7 @@ function extractSuccessOperation(
           n.expression.text === "successResult"
         ) {
           const firstArg = n.arguments[0];
-          if (firstArg && ts.isStringLiteral(firstArg)) {
+          if (ts.isStringLiteral(firstArg)) {
             result = firstArg.text;
           }
           return;
@@ -220,8 +223,8 @@ describe("OpenAPI contract conformance", () => {
   const runtimeCases = extractSwitchCases(switchStmt);
   const runtimeOps = runtimeCases.map((c) => c.op);
 
-  it("runtime has exactly 32 operations", () => {
-    expect(runtimeOps.length).toBe(32);
+  it("runtime has exactly 34 operations", () => {
+    expect(runtimeOps.length).toBe(34);
   });
 
   it("switch cases match WriteRequest discriminator mapping keys", () => {
@@ -233,7 +236,7 @@ describe("OpenAPI contract conformance", () => {
   it("switch cases match WriteRequest oneOf refs", () => {
     const writeReq = spec.components.schemas.WriteRequest;
     const oneOfRefs = writeReq.oneOf.map((s) => s.$ref.split("/").pop()!);
-    expect(oneOfRefs.length).toBe(32);
+    expect(oneOfRefs.length).toBe(34);
     // Each ref should point to a schema whose operation const matches a runtime op
     for (const ref of oneOfRefs) {
       const schema = spec.components.schemas[ref];
@@ -252,7 +255,7 @@ describe("OpenAPI contract conformance", () => {
   it("switch cases match WriteSuccessResponse oneOf refs", () => {
     const writeSuccess = spec.components.schemas.WriteSuccessResponse;
     const oneOfRefs = writeSuccess.oneOf.map((s) => s.$ref.split("/").pop()!);
-    expect(oneOfRefs.length).toBe(32);
+    expect(oneOfRefs.length).toBe(34);
     for (const ref of oneOfRefs) {
       const schema = spec.components.schemas[ref];
       expect(schema).toBeDefined();
@@ -304,7 +307,7 @@ describe("OpenAPI contract conformance", () => {
         .join("");
       const schemaName = pascal + "Request";
       const schema = spec.components.schemas[schemaName];
-      const schemaProps = new Set(Object.keys(schema.properties || {}));
+      const schemaProps = new Set(Object.keys(schema.properties));
 
       // Handler fields should be a subset of schema properties
       for (const field of allHandlerFields) {
@@ -373,7 +376,7 @@ describe("OpenAPI contract conformance", () => {
 
   it("attach success response has required top-level fields", () => {
     const attachSuccess = spec.components.schemas.AttachSuccessResponse;
-    const topProps = attachSuccess.allOf[1].required || [];
+    const topProps = attachSuccess.allOf[1].required;
     expect(topProps).toContain("attachment_key");
     expect(topProps).toContain("attachment_id");
     expect(topProps).toContain("message");
