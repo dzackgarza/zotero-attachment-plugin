@@ -114,21 +114,37 @@ function requireRequestObject(data: unknown): RequestData {
 
 // A Zotero HTTP endpoint is registered as a constructor function whose prototype carries
 // the request metadata and init handler. The slot is cleared to undefined on shutdown.
+// Single-parameter init receives {headers, data, ...} and returns [status, contentType,
+// body]; the two-parameter form receives (data, sendResponse). Both are dispatched by
+// arity in zotero/zotero chrome/content/zotero/xpcom/server/server.js.
+type EndpointResult = [number, string, string];
 type EndpointPrototype = {
   supportedMethods: string[];
   supportedDataTypes?: string[];
-  init: (...args: never[]) => void | Promise<void>;
+  allowRequestsFromUnsafeWebContent?: boolean;
+  init: (
+    ...args: never[]
+  ) => void | EndpointResult | Promise<void | EndpointResult>;
 };
 type EndpointConstructor = { (): void; prototype: EndpointPrototype };
+
+// Header names arrive lowercased (server.js parses them into Zotero.Server.Headers
+// with lowercase keys).
+type EndpointRequest = {
+  headers: Record<string, string | undefined>;
+  data: unknown;
+};
 
 let AttachEndpoint: EndpointConstructor | undefined;
 let WriteEndpoint: EndpointConstructor | undefined;
 let VersionEndpoint: EndpointConstructor | undefined;
+let OpenApiEndpoint: EndpointConstructor | undefined;
 
 let PLUGIN_VERSION = "3.2.0-dev";
 let FULLTEXT_ATTACH_PATH = "/attach";
 let LOCAL_WRITE_PATH = "/write";
 let VERSION_PATH = "/version";
+let OPENAPI_PATH = "/openapi.yaml";
 let FULLTEXT_ALLOWED_DIRS = ["/tmp", "/var/tmp"];
 let ADDON_ID = "local-write-api@dzackgarza.com";
 let HOMEPAGE_URL = "https://github.com/dzackgarza/zotero-local-write-api";
@@ -151,6 +167,33 @@ let PLUGIN_CAPABILITIES = [
 ];
 
 let BIBTEX_TRANSLATOR_ID = "9cb70025-a888-4a29-a210-93ec52da40d4";
+
+// Optional bearer-token auth for the write surface. With the token pref unset
+// the API keeps its historical loopback-only, no-auth behavior. Setting the
+// pref is REQUIRED before exposing these endpoints through a tunnel (see
+// docs/gpt-action.md): a Custom GPT Action then sends the token as
+// "Authorization: Bearer <token>", the one credential the GPT builder supports.
+let TOKEN_PREF = "extensions.zotero.localWriteAPI.token";
+// When set, /openapi.yaml advertises this server URL instead of the loopback
+// one, so the GPT builder can import the schema straight from the tunnel.
+let PUBLIC_BASE_URL_PREF = "extensions.zotero.localWriteAPI.publicBaseURL";
+
+function bearerAuthFailure(request: EndpointRequest): EndpointResult | null {
+  let token = Zotero.Prefs.get(TOKEN_PREF, true);
+  if (typeof token !== "string" || token === "") {
+    return null;
+  }
+  if (request.headers.authorization === "Bearer " + token) {
+    return null;
+  }
+  return [
+    401,
+    "application/json",
+    JSON.stringify(
+      errorResult("authorize", "auth", "Missing or invalid bearer token", {}),
+    ),
+  ];
+}
 
 type RequestData = Record<string, unknown>;
 type SendResponse = (status: number, contentType: string, body: string) => void;
@@ -1402,6 +1445,94 @@ async function runWrite(data: RequestData) {
   }
 }
 
+function jsonResult(status: number, payload: JsonPayload): EndpointResult {
+  return [status, "application/json", JSON.stringify(payload)];
+}
+
+async function handleAttachRequest(data: unknown): Promise<EndpointResult> {
+  try {
+    log(
+      "Received POST request to " +
+        FULLTEXT_ATTACH_PATH +
+        " [v" +
+        PLUGIN_VERSION +
+        "]",
+    );
+    return jsonResult(
+      200,
+      await handleFulltextAttach(requireRequestObject(data)),
+    );
+  } catch (error) {
+    let msg = (error as Error).message;
+    let status = isApiError(error) ? error.status : 500;
+    log(
+      "Error in " + FULLTEXT_ATTACH_PATH + " [v" + PLUGIN_VERSION + "]: " + msg,
+    );
+    return jsonResult(
+      status,
+      errorResult("attach_file_to_item", "attach_endpoint", msg, {
+        request: data,
+      }),
+    );
+  }
+}
+
+async function handleWriteRequest(data: unknown): Promise<EndpointResult> {
+  // operation may be absent on a malformed request; label it explicitly for
+  // diagnostics. This is the error-rendering boundary, not a runtime default.
+  // It is computed inside the try: reading data.operation on a null body
+  // throws, and doing that outside the try left the error unrendered, which
+  // hung the request forever instead of answering 400.
+  let operationLabel = "unknown_operation";
+  try {
+    let body = requireRequestObject(data);
+    if (typeof body.operation === "string") {
+      operationLabel = body.operation;
+    }
+    log(
+      "Received POST request to " +
+        LOCAL_WRITE_PATH +
+        " [operation=" +
+        operationLabel +
+        "]",
+    );
+    return jsonResult(200, await runWrite(body));
+  } catch (error) {
+    let msg = (error as Error).message;
+    let status = isApiError(error) ? error.status : 500;
+    log(
+      "Error in " +
+        LOCAL_WRITE_PATH +
+        " [operation=" +
+        operationLabel +
+        "]: " +
+        msg,
+    );
+    return jsonResult(
+      status,
+      errorResult(operationLabel, "write_endpoint", msg, { request: data }),
+    );
+  }
+}
+
+// rootURI of the installed XPI, captured at startup; the bundled openapi.yaml
+// is read back from it.
+let pluginRootURI = "";
+
+async function openApiSpecText(): Promise<string> {
+  // Bundled into the XPI by build.py next to bootstrap.js.
+  let text = await Zotero.File.getContentsFromURLAsync(
+    pluginRootURI + "openapi.yaml",
+  );
+  let publicBaseUrl = Zotero.Prefs.get(PUBLIC_BASE_URL_PREF, true);
+  if (typeof publicBaseUrl === "string" && publicBaseUrl !== "") {
+    // The spec's single server entry is the loopback URL; a set pref rewrites
+    // it so a schema imported by URL points at the tunnel hostname.
+    return text.replace("http://127.0.0.1:23119", publicBaseUrl);
+  }
+  return text;
+}
+
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 function install(): void {
   log("Installed " + PLUGIN_VERSION);
@@ -1419,46 +1550,19 @@ async function startup({
 }): Promise<void> {
   void id;
   void version;
-  void rootURI;
+  pluginRootURI = rootURI;
   log("Starting " + PLUGIN_VERSION);
 
   AttachEndpoint = function () {};
   AttachEndpoint.prototype = {
     supportedMethods: ["POST"],
     supportedDataTypes: ["application/json"],
-    init: async function (data: RequestData, sendResponse: SendResponse) {
-      try {
-        log(
-          "Received POST request to " +
-            FULLTEXT_ATTACH_PATH +
-            " [v" +
-            PLUGIN_VERSION +
-            "]",
-        );
-        sendJSON(
-          sendResponse,
-          200,
-          await handleFulltextAttach(requireRequestObject(data)),
-        );
-      } catch (error) {
-        let msg = (error as Error).message;
-        let status = isApiError(error) ? error.status : 500;
-        log(
-          "Error in " +
-            FULLTEXT_ATTACH_PATH +
-            " [v" +
-            PLUGIN_VERSION +
-            "]: " +
-            msg,
-        );
-        sendJSON(
-          sendResponse,
-          status,
-          errorResult("attach_file_to_item", "attach_endpoint", msg, {
-            request: data,
-          }),
-        );
+    init: function (request: EndpointRequest) {
+      let denied = bearerAuthFailure(request);
+      if (denied !== null) {
+        return denied;
       }
+      return handleAttachRequest(request.data);
     },
   };
 
@@ -1466,43 +1570,12 @@ async function startup({
   WriteEndpoint.prototype = {
     supportedMethods: ["POST"],
     supportedDataTypes: ["application/json"],
-    init: async function (data: RequestData, sendResponse: SendResponse) {
-      // operation may be absent on a malformed request; label it explicitly for
-      // diagnostics. This is the error-rendering boundary, not a runtime default.
-      // It is computed inside the try: reading data.operation on a null body
-      // throws, and doing that outside the try left sendResponse uncalled, which
-      // hung the request forever instead of answering 400.
-      let operationLabel = "unknown_operation";
-      try {
-        let body = requireRequestObject(data);
-        if (typeof body.operation === "string") {
-          operationLabel = body.operation;
-        }
-        log(
-          "Received POST request to " +
-            LOCAL_WRITE_PATH +
-            " [operation=" +
-            operationLabel +
-            "]",
-        );
-        sendJSON(sendResponse, 200, await runWrite(body));
-      } catch (error) {
-        let msg = (error as Error).message;
-        let status = isApiError(error) ? error.status : 500;
-        log(
-          "Error in " +
-            LOCAL_WRITE_PATH +
-            " [operation=" +
-            operationLabel +
-            "]: " +
-            msg,
-        );
-        sendJSON(
-          sendResponse,
-          status,
-          errorResult(operationLabel, "write_endpoint", msg, { request: data }),
-        );
+    init: function (request: EndpointRequest) {
+      let denied = bearerAuthFailure(request);
+      if (denied !== null) {
+        return denied;
       }
+      return handleWriteRequest(request.data);
     },
   };
 
@@ -1521,12 +1594,33 @@ async function startup({
     },
   };
 
+  OpenApiEndpoint = function () {};
+  OpenApiEndpoint.prototype = {
+    supportedMethods: ["GET"],
+    // The schema is a public static document: the GPT builder imports it by
+    // URL and humans open it in a browser, so Zotero's browser-request block
+    // is opted out for this path only.
+    allowRequestsFromUnsafeWebContent: true,
+    init: async function (_request: EndpointRequest): Promise<EndpointResult> {
+      log(
+        "Received GET request to " +
+          OPENAPI_PATH +
+          " [v" +
+          PLUGIN_VERSION +
+          "]",
+      );
+      return [200, "text/yaml; charset=utf-8", await openApiSpecText()];
+    },
+  };
+
   Zotero.Server.Endpoints[FULLTEXT_ATTACH_PATH] = AttachEndpoint;
   Zotero.Server.Endpoints[LOCAL_WRITE_PATH] = WriteEndpoint;
   Zotero.Server.Endpoints[VERSION_PATH] = VersionEndpoint;
+  Zotero.Server.Endpoints[OPENAPI_PATH] = OpenApiEndpoint;
   log("Registered " + FULLTEXT_ATTACH_PATH + " endpoint");
   log("Registered " + LOCAL_WRITE_PATH + " endpoint");
   log("Registered " + VERSION_PATH + " endpoint");
+  log("Registered " + OPENAPI_PATH + " endpoint");
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -1554,12 +1648,15 @@ function shutdown(
   Reflect.deleteProperty(Zotero.Server.Endpoints, FULLTEXT_ATTACH_PATH);
   Reflect.deleteProperty(Zotero.Server.Endpoints, LOCAL_WRITE_PATH);
   Reflect.deleteProperty(Zotero.Server.Endpoints, VERSION_PATH);
+  Reflect.deleteProperty(Zotero.Server.Endpoints, OPENAPI_PATH);
   AttachEndpoint = undefined;
   WriteEndpoint = undefined;
   VersionEndpoint = undefined;
+  OpenApiEndpoint = undefined;
   log("Unregistered " + FULLTEXT_ATTACH_PATH + " endpoint");
   log("Unregistered " + LOCAL_WRITE_PATH + " endpoint");
   log("Unregistered " + VERSION_PATH + " endpoint");
+  log("Unregistered " + OPENAPI_PATH + " endpoint");
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars

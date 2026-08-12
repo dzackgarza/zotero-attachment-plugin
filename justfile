@@ -382,3 +382,46 @@ _release bump_type: (_bump bump_type)
     git push
     git push --tags
     echo "v${version} tagged — Actions will publish the release"
+
+# --- GPT Action tunnel (see docs/gpt-action.md) ---
+
+tunnel_name := "zotero-write"
+tunnel_hostname := "zotero-write.dzackgarza.com"
+tunnel_config := home_directory() / ".cloudflared/zotero-write.yml"
+tunnel_unit := "zotero-write-tunnel.service"
+
+# Create the named tunnel, route DNS, and write ~/.cloudflared/zotero-write.yml
+tunnel-setup:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cloudflared tunnel list --output json | jq -e --arg n "{{ tunnel_name }}" \
+        'map(select(.name == $n)) | length > 0' > /dev/null \
+        || cloudflared tunnel create "{{ tunnel_name }}"
+    uuid=$(cloudflared tunnel list --output json | jq -r --arg n "{{ tunnel_name }}" \
+        'map(select(.name == $n)) | .[0].id')
+    cloudflared tunnel route dns "{{ tunnel_name }}" "{{ tunnel_hostname }}"
+    sed -e "s|__TUNNEL_UUID__|${uuid}|g" -e "s|__HOME__|${HOME}|g" \
+        dev/cloudflared/zotero-write.yml.template > "{{ tunnel_config }}"
+    echo "Wrote {{ tunnel_config }} (tunnel ${uuid})"
+
+# Install and start the systemd user unit that keeps the tunnel up
+tunnel-install:
+    mkdir -p ~/.config/systemd/user
+    cp systemd/{{ tunnel_unit }} ~/.config/systemd/user/
+    systemctl --user daemon-reload
+    systemctl --user enable --now {{ tunnel_unit }}
+    systemctl --user --no-pager status {{ tunnel_unit }}
+
+tunnel-status:
+    systemctl --user --no-pager status {{ tunnel_unit }}
+    cloudflared tunnel info {{ tunnel_name }}
+
+tunnel-logs:
+    journalctl --user -u {{ tunnel_unit }} -f
+
+tunnel-restart:
+    systemctl --user restart {{ tunnel_unit }}
+
+# Stop and disable the unit (the tunnel and DNS record survive)
+tunnel-uninstall:
+    systemctl --user disable --now {{ tunnel_unit }}
