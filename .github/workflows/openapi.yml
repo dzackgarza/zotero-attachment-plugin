@@ -58,7 +58,9 @@ jobs:
       - name: Validate revised schema
         uses: oasdiff/oasdiff-action/validate@v0
         with:
-          file: openapi.yaml
+          # The validate action's input is `spec`; `file` is silently ignored
+          # and the action then fails with "failed to load original spec".
+          spec: openapi.yaml
           fail-on: WARN
 
       - name: Breaking-change check vs base
