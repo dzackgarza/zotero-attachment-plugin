@@ -1,10 +1,7 @@
 # Custom GPT Action for the Zotero Local Write API
 
-This walkthrough exposes the plugin's endpoints at
-`https://zotero-write.dzackgarza.com` through a Cloudflare named tunnel, then
-imports them into a Custom GPT as an Action. The result: a GPT that can write
-items, attach fulltext, and report the plugin version against the live Zotero
-library on this machine.
+This walkthrough exposes the plugin's endpoints at `https://zotero-write.dzackgarza.com` through a Cloudflare named tunnel, then imports them into a Custom GPT as an Action.
+The result: a GPT that can write items, attach fulltext, and report the plugin version against the live Zotero library on this machine.
 
 ## Architecture
 
@@ -23,24 +20,17 @@ Custom GPT Action ──HTTPS──▶ Cloudflare edge
 
 Two layers do the guarding:
 
-- **Ingress path filter** — port 23119 also hosts Zotero's unauthenticated
-  local read API and the connector endpoints. The tunnel config exposes
-  exactly the four plugin routes; everything else answers 404 at the edge.
-- **Plugin Bearer auth** — with the `extensions.zotero.localWriteAPI.token`
-  pref set, `/write` and `/attach` require `Authorization: Bearer <token>`.
-  `/version` and `/openapi.yaml` stay public: the first is the health check,
-  the second is the schema the GPT builder imports. With the pref unset the
-  plugin behaves exactly as before (loopback-only, no auth) — do not run the
-  tunnel in that state.
+- **Ingress path filter** — port 23119 also hosts Zotero's unauthenticated local read API and the connector endpoints.
+  The tunnel config exposes exactly the four plugin routes; everything else answers 404 at the edge.
 
-There is no Cloudflare Access policy in front, deliberately: Access needs two
-headers (`CF-Access-Client-Id`/`-Secret`) and a Custom GPT Action can send
-exactly one credential.
+- **Plugin Bearer auth** — with the `extensions.zotero.localWriteAPI.token` pref set, `/write` and `/attach` require `Authorization: Bearer <token>`. `/version` and `/openapi.yaml` stay public: the first is the health check, the second is the schema the GPT builder imports.
+  With the pref unset the plugin behaves exactly as before (loopback-only, no auth) — do not run the tunnel in that state.
+
+There is no Cloudflare Access policy in front, deliberately: Access needs two headers (`CF-Access-Client-Id`/`-Secret`) and a Custom GPT Action can send exactly one credential.
 
 ## One-time setup
 
-Prerequisites: `cloudflared` is logged in (`~/.cloudflared/cert.pem` exists),
-Zotero is running with plugin ≥ 3.4.0 installed.
+Prerequisites: `cloudflared` is logged in (`~/.cloudflared/cert.pem` exists), Zotero is running with plugin ≥ 3.4.0 installed.
 
 1. **Mint a token** and store it where the house keeps secrets:
 
@@ -51,12 +41,12 @@ Zotero is running with plugin ≥ 3.4.0 installed.
    ```
 
 2. **Set the Zotero prefs.** Zotero → Settings → Advanced → Config Editor:
+
    - `extensions.zotero.localWriteAPI.token` → the same token (string; create it if absent)
+
    - `extensions.zotero.localWriteAPI.publicBaseURL` → `https://zotero-write.dzackgarza.com`
 
-   The second pref makes `/openapi.yaml` advertise the public server URL
-   instead of `http://127.0.0.1:23119`, so the GPT builder imports a schema
-   that already points at the tunnel.
+   The second pref makes `/openapi.yaml` advertise the public server URL instead of `http://127.0.0.1:23119`, so the GPT builder imports a schema that already points at the tunnel.
 
 3. **Create the tunnel and DNS route, install the service:**
 
@@ -78,12 +68,13 @@ Zotero is running with plugin ≥ 3.4.0 installed.
 ## Import into a Custom GPT
 
 1. ChatGPT → Explore GPTs → **Create** → Configure → **Create new action**.
+
 2. Authentication → **API Key** → Auth Type **Bearer** → paste the token.
-3. Schema → **Import from URL** →
-   `https://zotero-write.dzackgarza.com/openapi.yaml`.
-4. The three operations appear. Test with a prompt like
-   *"What version is the Zotero write API running?"* (calls `/version`),
-   then *"File this paper: …"* (calls `/write`).
+
+3. Schema → **Import from URL** → `https://zotero-write.dzackgarza.com/openapi.yaml`.
+
+4. The three operations appear.
+   Test with a prompt like *"What version is the Zotero write API running?"* (calls `/version`), then *"File this paper: …"* (calls `/write`).
 
 ## Operations
 
@@ -94,9 +85,7 @@ just tunnel-restart
 just tunnel-uninstall  # stop + disable the unit (tunnel and DNS survive)
 ```
 
-Token rotation: mint a new token, update the Zotero pref and `~/.envrc`, then
-update the key in the GPT's Action auth. No service restart needed — the
-plugin reads the pref per request.
+Token rotation: mint a new token, update the Zotero pref and `~/.envrc`, then update the key in the GPT's Action auth.
+No service restart needed — the plugin reads the pref per request.
 
-Teardown beyond the unit: `cloudflared tunnel delete zotero-write` and remove
-the `zotero-write` CNAME in the Cloudflare dashboard.
+Teardown beyond the unit: `cloudflared tunnel delete zotero-write` and remove the `zotero-write` CNAME in the Cloudflare dashboard.

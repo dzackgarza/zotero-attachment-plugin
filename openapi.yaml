@@ -114,7 +114,7 @@ paths:
       description: 'Serves the schema bundled with the running plugin. When the extensions.zotero.localWriteAPI.publicBaseURL preference is set, the server URL is rewritten to it so a schema imported by URL points at the public hostname. Always public: no authentication.'
       security: []
       responses:
-        "200":
+        '200':
           description: The OpenAPI schema for this plugin version.
           content:
             text/yaml:
