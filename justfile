@@ -1,10 +1,23 @@
 qc-type := "bun"
 
-# Run the full local QC contract
-test:
-    @just -f ~/ai-review-ci/justfiles/bun.just -d . test
+# ai-review-ci contract variables consumed by doctor and workflow installers.
+ai_review_ci_schema_version := "1"
+ai_review_ci_profile := "bun"
+ai_review_ci_ref := "main"
+ai_review_ci_release_channel := "main"
+ai_review_ci_workflow_template_version := "1"
+ai_review_ci_local_delegation := "global-justfile"
+ai_review_ci_default_branch := "main"
 
-# Run the full CI QC contract
+# Run immediate commit-tier QC
+test-commit:
+    @just -f ~/ai-review-ci/justfiles/bun.just -d . test-commit
+
+# Run the full project suite before pushing
+test-push:
+    @just -f ~/ai-review-ci/justfiles/bun.just -d . test-push
+
+# Run CI acceptance QC
 test-ci:
     @just -f ~/ai-review-ci/justfiles/bun.just -d . test-ci
 
@@ -40,6 +53,246 @@ smoke-live:
     fi
     python3 examples/live_smoke.py "${args[@]}"
 
+# Build the working-tree XPI and hot-install it into a Zotero profile, then
+# restart Zotero with a cache purge so the current code is actually loaded, and
+# wait until the add-on answers with the built version and its capabilities.
+#
+# This REPLACES the running add-on and RESTARTS Zotero (closing the current
+# session). updates.json is a release channel, not a reliable local same-version
+# reload, so the proven path is replace-profile-XPI + restart (AGENTS.md).
+#
+# This is the ONLY install path. Locally it targets the active Default=1 profile;
+# CI sets ZOTERO_PROFILE_DIR (and ZOTERO_PROFILE_NAME, passed to -P) to target a
+# disposable profile. The build -> byte-compare -> purgecache-restart -> version
+# wait sequence is what catches the stale-build trap, so CI must not re-implement
+# it: a second copy that drifts would prove something different from local.
+#   ZOTERO_PROFILE_DIR   override the profile directory (default: Default=1)
+#   ZOTERO_PROFILE_NAME  profile name for `zotero -P` (default: none)
+[doc("Build, install, and restart Zotero so the working-tree XPI is live (RESTARTS Zotero)")]
+install-live:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    version="$(cat VERSION)"
+    xpi="local-write-api-${version}.xpi"
+
+    # 1. Build from the working tree.
+    python3 build.py
+    test -f "$xpi" || { echo "expected $xpi was not built" >&2; exit 1; }
+
+    # 2. Resolve the target profile: CI provides one, otherwise Default=1.
+    profile_dir="${ZOTERO_PROFILE_DIR:-$(just _default-profile-dir)}"
+    test -d "$profile_dir" || { echo "profile dir not found: $profile_dir" >&2; exit 1; }
+    ext_dir="${profile_dir}/extensions"
+    installed="${ext_dir}/local-write-api@dzackgarza.com.xpi"
+
+    # 3. Timestamped backup of the currently installed XPI.
+    if [[ -f "$installed" ]]; then
+        cp -p "$installed" "${installed}.bak.$(date +%Y%m%d-%H%M%S)"
+    fi
+
+    # 4. Install and verify the installed bytes match the build exactly. A
+    #    matching version string is NOT proof when rebuilding the same version.
+    mkdir -p "$ext_dir"
+    cp "$xpi" "$installed"
+    if [[ "$(sha256sum "$xpi" | cut -d' ' -f1)" != "$(sha256sum "$installed" | cut -d' ' -f1)" ]]; then
+        echo "sha256 mismatch after install" >&2
+        exit 1
+    fi
+    echo "installed $xpi -> $installed"
+
+    # 5. Restart Zotero with cache purge. Stop by exact process name (-x), never
+    #    pkill -f, whose pattern would match this recipe's own shell (AGENTS.md).
+    pkill -x zotero-bin || true
+    pkill -x zotero || true
+    sleep 3
+    profile_args=()
+    if [[ -n "${ZOTERO_PROFILE_NAME:-}" ]]; then
+        profile_args+=(-P "${ZOTERO_PROFILE_NAME}")
+    fi
+    log="${ZOTERO_LOG:-/tmp/zotero-local-write-api-zotero.log}"
+    setsid env \
+        DISPLAY="${DISPLAY:-:0}" \
+        WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-wayland-1}" \
+        XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" \
+        DBUS_SESSION_BUS_ADDRESS="${DBUS_SESSION_BUS_ADDRESS:-unix:path=/run/user/$(id -u)/bus}" \
+        zotero "${profile_args[@]}" -purgecaches >"$log" 2>&1 < /dev/null &
+
+    # 6. Wait for the add-on to answer with the just-built version AND the
+    #    capabilities the proofs rely on. Version alone would pass against a
+    #    build that dropped an endpoint.
+    base="${ZOTERO_LOCAL_BASE_URL:-http://127.0.0.1:23119}"
+    probe="$(mktemp)"
+    trap 'rm -f "$probe"' EXIT
+    for _ in $(seq 1 60); do
+        if curl -fsS "$base/version" -o "$probe" 2>/dev/null; then
+            if python3 -c '
+    import json, sys
+    probe, expected = sys.argv[1], sys.argv[2]
+    v = json.load(open(probe))
+    if v.get("version") != expected:
+        sys.exit(1)
+    required = {"attach", "attach_bytes", "write", "version_probe", "import_bibtex"}
+    missing = required - set(v.get("capabilities") or [])
+    if missing:
+        sys.exit(f"add-on is missing capabilities: {sorted(missing)}")
+    ' "$probe" "$version"; then
+                echo "Zotero up with version $version — run 'EXPECTED_VERSION=$version just smoke-live' to prove behavior"
+                exit 0
+            fi
+        fi
+        sleep 2
+    done
+    echo "Zotero did not report version $version within timeout; see $log" >&2
+    exit 1
+
+# Path of the active (Default=1) Zotero profile directory.
+[private]
+_default-profile-dir:
+    #!/usr/bin/env python3
+    # profiles.ini is INI, so it is parsed with configparser rather than matched
+    # with a line-order-dependent regex: Default= and Path= may appear in either
+    # order within a section, and only [Profile*] sections carry Default=1 (an
+    # [Install*] section's Default= is a path, not a flag).
+    import configparser, pathlib, sys
+
+    ini = pathlib.Path.home() / ".zotero/zotero/profiles.ini"
+    if not ini.is_file():
+        sys.exit(f"no profiles.ini at {ini}")
+    cfg = configparser.ConfigParser()
+    cfg.read(ini)
+    for name in cfg.sections():
+        section = cfg[name]
+        if "Path" not in section or section.get("Default", "").strip() != "1":
+            continue
+        path = pathlib.Path(section["Path"])
+        if section.get("IsRelative", "1").strip() == "1":
+            path = ini.parent / path
+        print(path)
+        break
+    else:
+        sys.exit(f"no Default=1 profile with a Path in {ini}")
+
+# Provision (idempotently) a disposable Zotero profile + empty data directory
+# for the mutating fuzz, and print `NAME<TAB>DIR<TAB>DATADIR`. Does NOT touch the
+# Default=1 profile and does NOT start Zotero — the caller boots it via
+# `ZOTERO_PROFILE_NAME=<name> ZOTERO_PROFILE_DIR=<dir> just install-live` and
+# then approves the sideloaded add-on with `_approve-sideloaded-addon`.
+#
+# ZOTERO_ROOT overrides ~/.zotero so the file surgery can be tested off to the
+# side. profiles.ini is written with case preserved because Mozilla's
+# nsINIParser is case-sensitive (Name/Path/Default), unlike configparser.
+[private]
+_provision-disposable-profile name="lw-fuzz":
+    #!/usr/bin/env python3
+    import configparser, os, pathlib
+    root = pathlib.Path(os.environ.get("ZOTERO_ROOT", pathlib.Path.home() / ".zotero"))
+    name = "{{name}}"
+    profile_dir = root / "zotero" / f"{name}-disposable"
+    data_dir = root / f"{name}-data"
+    profile_dir.mkdir(parents=True, exist_ok=True)
+    data_dir.mkdir(parents=True, exist_ok=True)
+
+    ini = root / "zotero" / "profiles.ini"
+    cfg = configparser.ConfigParser()
+    cfg.optionxform = str
+    if ini.is_file():
+        cfg.read(ini)
+    # Reuse an existing section for this profile name, else the next free slot.
+    section = next(
+        (s for s in cfg.sections()
+         if s.startswith("Profile") and cfg[s].get("Name") == name),
+        None,
+    )
+    if section is None:
+        i = 0
+        while cfg.has_section(f"Profile{i}"):
+            i += 1
+        section = f"Profile{i}"
+        cfg.add_section(section)
+    cfg[section]["Name"] = name
+    cfg[section]["IsRelative"] = "0"
+    cfg[section]["Path"] = str(profile_dir)
+    cfg[section].pop("Default", None)  # never the default profile
+    with open(ini, "w") as f:
+        cfg.write(f, space_around_delimiters=False)
+
+    # Disposable library + local API on; no sync credentials, so this profile
+    # cannot reach the online library.
+    (profile_dir / "prefs.js").write_text(
+        f'user_pref("extensions.zotero.dataDir", "{data_dir}");\n'
+        'user_pref("extensions.zotero.useDataDir", true);\n'
+        'user_pref("extensions.zotero.httpServer.enabled", true);\n'
+        'user_pref("extensions.zotero.httpServer.localAPI.enabled", true);\n'
+        'user_pref("extensions.zotero.firstRun2", false);\n'
+        'user_pref("extensions.zotero.firstRun.skipFirefoxProfileAccessCheck", true);\n'
+    )
+    print(f"{name}\t{profile_dir}\t{data_dir}")
+
+# Approve the add-on that Zotero registered as a disabled sideload on first
+# boot of a fresh profile, so a second boot activates it. No-op until Zotero has
+# created extensions.json. addon_id defaults to this add-on.
+[private]
+_approve-sideloaded-addon profile_dir addon_id="local-write-api@dzackgarza.com":
+    #!/usr/bin/env python3
+    import json, pathlib, sys
+    p = pathlib.Path("{{profile_dir}}") / "extensions.json"
+    if not p.is_file():
+        sys.exit(f"{p} does not exist yet; boot Zotero on this profile once first")
+    data = json.loads(p.read_text())
+    hit = False
+    for addon in data.get("addons", []):
+        if addon.get("id") == "{{addon_id}}":
+            addon["active"] = True
+            addon["userDisabled"] = False
+            addon["seen"] = True
+            hit = True
+    if not hit:
+        sys.exit(f"{{addon_id}} not registered in {p}; did install-live copy the XPI?")
+    p.write_text(json.dumps(data))
+    print(f"approved {{addon_id}} in {p}")
+
+# Static OpenAPI contract check (lint + generated-drift + dispatch conformance)
+openapi-check:
+    bun run openapi:check
+
+# Generic Schemathesis fuzzing against a live Zotero.
+# MUTATING: point ZOTERO_LOCAL_BASE_URL at a disposable test profile, never a
+# real library. The filter_case hook excludes dangerous/networked/bulk ops.
+[doc("Generic Schemathesis fuzz against a live Zotero (MUTATING: use a disposable profile)")]
+schemathesis-fuzz-live:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    url="${ZOTERO_LOCAL_BASE_URL:-http://127.0.0.1:23119}"
+    export PYTHONPATH="${PYTHONPATH:-}:."
+    export SCHEMATHESIS_HOOKS="tests.schemathesis.hooks"
+    # A fixed seed for a reproducible run, then a randomized exploration run.
+    # Both emit JUnit + HAR reproduction artifacts. The stateful workflow runs
+    # separately via schemathesis-stateful-live.
+    for seed in "--seed 0" ""; do
+        uv run st run openapi.yaml --url "$url" \
+            --phases examples,coverage,fuzzing \
+            ${seed} \
+            --report junit,har --report-dir schemathesis-report
+    done
+
+# Live proof of the generated OpenAPI client wrapper (src/client.ts) against a
+# real Zotero: real POST /write, body serialized unchanged, typed success/error
+# split. MUTATING, so it is opt-in via ZOTERO_LIVE and is never collected by
+# ordinary `bun test`; objects are uniquely prefixed and trashed afterwards.
+[doc("Live proof of the generated TypeScript client wrapper (MUTATING, opt-in)")]
+client-live:
+    ZOTERO_LIVE=1 bun test tests/client-live.test.ts
+
+# Stateful create/note/collection/tag/merge/restore/trash proof with Zotero
+# read-back. Safe against a real library: unique-prefixed objects, cleanup in
+# teardown. Skips when no live add-on is reachable.
+[doc("Stateful create/merge/restore/trash workflow proof against a live Zotero")]
+schemathesis-stateful-live:
+    uv run pytest tests/schemathesis/test_stateful.py -q
+
+# Full live API proof: generic fuzz, stateful workflow, client wrapper, smoke.
+api-live: schemathesis-fuzz-live schemathesis-stateful-live client-live smoke-live
+
 # Run all checks (typecheck + lint)
 check: typecheck lint
 
@@ -54,6 +307,7 @@ release-major: (_release "major")
 
 # Regenerate plugin icons via Replicate (requires REPLICATE_API_TOKEN in env)
 # Run this, commit src/icons/, then cut a release.
+[doc("Regenerate plugin icons via Replicate (requires REPLICATE_API_TOKEN)")]
 gen-icons:
     #!/usr/bin/env python3
     import os, time, urllib.request, json
