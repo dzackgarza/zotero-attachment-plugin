@@ -35,7 +35,7 @@ lint:
 
 # Compile TypeScript and build the XPI (does not bump version or release)
 build:
-    python3 build.py
+    uv run build.py
 
 # Live runtime proof against a real Zotero with the current XPI installed
 smoke-live:
@@ -76,12 +76,18 @@ install-live:
     xpi="local-write-api-${version}.xpi"
 
     # 1. Build from the working tree.
-    python3 build.py
-    test -f "$xpi" || { echo "expected $xpi was not built" >&2; exit 1; }
+    uv run build.py
+    if [[ ! -f "$xpi" ]]; then
+        echo "expected $xpi was not built" >&2
+        exit 1
+    fi
 
     # 2. Resolve the target profile: CI provides one, otherwise Default=1.
     profile_dir="${ZOTERO_PROFILE_DIR:-$(just _default-profile-dir)}"
-    test -d "$profile_dir" || { echo "profile dir not found: $profile_dir" >&2; exit 1; }
+    if [[ ! -d "$profile_dir" ]]; then
+        echo "profile dir not found: $profile_dir" >&2
+        exit 1
+    fi
     ext_dir="${profile_dir}/extensions"
     installed="${ext_dir}/local-write-api@dzackgarza.com.xpi"
 
@@ -102,8 +108,8 @@ install-live:
 
     # 5. Restart Zotero with cache purge. Stop by exact process name (-x), never
     #    pkill -f, whose pattern would match this recipe's own shell (AGENTS.md).
-    pkill -x zotero-bin || true
-    pkill -x zotero || true
+    if pgrep -x zotero-bin > /dev/null; then pkill -x zotero-bin; fi
+    if pgrep -x zotero > /dev/null; then pkill -x zotero; fi
     sleep 3
     profile_args=()
     if [[ -n "${ZOTERO_PROFILE_NAME:-}" ]]; then
@@ -394,9 +400,10 @@ tunnel_unit := "zotero-write-tunnel.service"
 tunnel-setup:
     #!/usr/bin/env bash
     set -euo pipefail
-    cloudflared tunnel list --output json | jq -e --arg n "{{ tunnel_name }}" \
-        'map(select(.name == $n)) | length > 0' > /dev/null \
-        || cloudflared tunnel create "{{ tunnel_name }}"
+    if ! cloudflared tunnel list --output json | jq -e --arg n "{{ tunnel_name }}" \
+        'map(select(.name == $n)) | length > 0' > /dev/null; then
+        cloudflared tunnel create "{{ tunnel_name }}"
+    fi
     uuid=$(cloudflared tunnel list --output json | jq -r --arg n "{{ tunnel_name }}" \
         'map(select(.name == $n)) | .[0].id')
     cloudflared tunnel route dns "{{ tunnel_name }}" "{{ tunnel_hostname }}"
