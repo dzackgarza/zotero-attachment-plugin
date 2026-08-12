@@ -3,6 +3,7 @@ from __future__ import annotations
 
 """Build release artifacts for the Zotero Local Write API plugin."""
 
+import argparse
 import hashlib
 import json
 import subprocess
@@ -161,7 +162,7 @@ def compile_typescript() -> None:
     print("Compiled TypeScript")
 
 
-def build() -> Path:
+def build(updates_path: Path = UPDATES_PATH) -> Path:
     print(f"Building {ADDON_NAME} v{VERSION}")
     print(f"Zotero compatibility: {STRICT_MIN_VERSION} – {STRICT_MAX_VERSION}")
     print(f"Tested target: Zotero {TESTED_ZOTERO_VERSION}")
@@ -171,7 +172,7 @@ def build() -> Path:
     write_json(SRC / "manifest.json", manifest)
     remove_old_xpis()
     xpi_path = build_xpi()
-    write_json(UPDATES_PATH, build_updates_manifest(sha256sum(xpi_path)))
+    write_json(updates_path, build_updates_manifest(sha256sum(xpi_path)))
 
     print(f"Wrote updates.json")
     print(f"Built {xpi_path.name}")
@@ -181,4 +182,13 @@ def build() -> Path:
 
 
 if __name__ == "__main__":
-    build()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--updates-out",
+        type=Path,
+        default=UPDATES_PATH,
+        help="Where to write the update manifest (default: tracked updates.json). "
+        "Test runs point this at a scratch path so the tracked release manifest, "
+        "whose hash must match the XPI uploaded to the GitHub release, stays untouched.",
+    )
+    build(parser.parse_args().updates_out)

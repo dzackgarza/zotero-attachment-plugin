@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test";
 import { createHash } from "node:crypto";
-import { existsSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import "../src/bootstrap";
 
 interface AddonManifest {
@@ -59,7 +61,12 @@ test("build emits an update manifest for the exact generated XPI", () => {
   let version = readFileSync("VERSION", "utf8").trim();
   let xpiName = `local-write-api-${version}.xpi`;
 
-  runCommand(["python3", "build.py"]);
+  // The tracked updates.json must keep the hash of the XPI uploaded to the
+  // GitHub release, so the manifest built from this dev tree goes to scratch.
+  let scratchDir = mkdtempSync(join(tmpdir(), "local-write-api-build-"));
+  let updatesOut = join(scratchDir, "updates.json");
+
+  runCommand(["python3", "build.py", "--updates-out", updatesOut]);
 
   try {
     expect(existsSync(xpiName)).toBe(true);
@@ -72,7 +79,7 @@ test("build emits an update manifest for the exact generated XPI", () => {
 
     let actualHash = createHash("sha256").update(readFileSync(xpiName)).digest("hex");
     let update =
-      readJson<UpdatesManifest>("updates.json").addons["local-write-api@dzackgarza.com"].updates[0];
+      readJson<UpdatesManifest>(updatesOut).addons["local-write-api@dzackgarza.com"].updates[0];
 
     expect(update).toEqual({
       version,
@@ -89,5 +96,6 @@ test("build emits an update manifest for the exact generated XPI", () => {
     rmSync("src/bootstrap.js", { force: true });
     rmSync("src/manifest.json", { force: true });
     rmSync(xpiName, { force: true });
+    rmSync(scratchDir, { recursive: true, force: true });
   }
 });
