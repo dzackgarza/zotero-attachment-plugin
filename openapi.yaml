@@ -1,0 +1,1660 @@
+openapi: 3.1.0
+info:
+  title: Zotero Local Write API
+  version: '3.3.1'
+  description: >
+    Zotero add-on that registers local HTTP write endpoints on Zotero's existing
+    server. Zotero's built-in local API is read-only; this add-on adds item, note,
+    attachment, collection, and tag mutations for the user library.
+    Zotero must be running with its local HTTP server enabled. No API key is
+    required because the server only listens on loopback.
+  license:
+    name: MIT
+    url: https://github.com/dzackgarza/zotero-local-write-api/blob/main/LICENSE
+externalDocs:
+  description: Repository
+  url: https://github.com/dzackgarza/zotero-local-write-api
+security: []
+servers:
+  - url: http://127.0.0.1:23119
+    description: Zotero's local HTTP server (loopback only)
+
+paths:
+  /version:
+    get:
+      operationId: getVersion
+      summary: Health check and capability probe
+      responses:
+        '200':
+          description: Add-on is installed and running.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VersionResponse'
+
+  /attach:
+    post:
+      operationId: attachFile
+      summary: Attach a stored file to an existing item
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AttachRequest'
+      responses:
+        '200':
+          description: Attachment created.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AttachSuccessResponse'
+        '400':
+          description: Malformed request, missing fields, invalid path or base64.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Parent item or file not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Unexpected server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /write:
+    post:
+      operationId: write
+      summary: Execute a write operation discriminated by the `operation` field.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WriteRequest'
+      responses:
+        '200':
+          description: Operation completed successfully.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WriteSuccessResponse'
+        '400':
+          description: Malformed request, missing fields, unsupported operation.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Referenced item, note, attachment, collection, or tag not found.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Request conflicts with current state (wrong item kind, source equals target, collection cycle).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Unexpected server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  schemas:
+    # ── Common schemas ──────────────────────────────────────────────
+
+    NonBlankString:
+      type: string
+      pattern: \S
+      description: String containing at least one non-whitespace character.
+
+    NormalizedStringArray:
+      type: array
+      items:
+        type: string
+        pattern: \S
+      description: >
+        Array of non-blank strings. Runtime trims entries, drops blanks,
+        and de-duplicates.
+
+    ItemKey:
+      $ref: '#/components/schemas/NonBlankString'
+
+    CollectionKey:
+      $ref: '#/components/schemas/NonBlankString'
+
+    SuccessEnvelope:
+      type: object
+      required:
+        - success
+        - operation
+        - stage
+        - version
+        - details
+      properties:
+        success:
+          const: true
+        operation:
+          type: string
+        stage:
+          const: completed
+        version:
+          type: string
+        details:
+          type: object
+          additionalProperties: true
+
+    ErrorResponse:
+      type: object
+      required:
+        - success
+        - operation
+        - stage
+        - error
+        - details
+        - version
+      properties:
+        success:
+          const: false
+        operation:
+          type: string
+        stage:
+          type: string
+        error:
+          type: string
+        details:
+          type: object
+          required:
+            - request
+          properties:
+            request:
+              description: >
+                The request body exactly as received, echoed back for
+                diagnostics. Usually an object, but a malformed body is echoed
+                as-is (a JSON null, array, or scalar) alongside the 400 that
+                rejects it, so this is deliberately not constrained to an object.
+        version:
+          type: string
+
+    CollectionDetails:
+      type: object
+      required:
+        - collection_key
+        - collection_name
+        - parent_key
+      properties:
+        collection_key:
+          type: string
+        collection_name:
+          type: string
+        parent_key:
+          type:
+            - string
+            - 'null'
+
+    # ── /version response ───────────────────────────────────────────
+
+    VersionResponse:
+      type: object
+      required:
+        - success
+        - healthy
+        - status
+        - message
+        - version
+        - addon_id
+        - homepage_url
+        - update_url
+        - endpoints
+        - compatibility
+        - capabilities
+      properties:
+        success:
+          const: true
+        healthy:
+          const: true
+        status:
+          const: ok
+        message:
+          type: string
+        version:
+          type: string
+        addon_id:
+          type: string
+        homepage_url:
+          type: string
+        update_url:
+          type: string
+        endpoints:
+          type: object
+          required:
+            - attach
+            - write
+            - version
+          properties:
+            attach:
+              type: string
+            write:
+              type: string
+            version:
+              type: string
+        compatibility:
+          type: object
+          required:
+            - strict_min_version
+            - strict_max_version
+            - tested_zotero_version
+          properties:
+            strict_min_version:
+              type: string
+            strict_max_version:
+              type: string
+            tested_zotero_version:
+              type: string
+        capabilities:
+          type: array
+          uniqueItems: true
+          items:
+            enum:
+              - attach
+              - attach_bytes
+              - write
+              - version_probe
+              - health_probe
+              - import_bibtex
+              - import_by_identifier
+              - selected_collection
+              - sync
+              - run_javascript
+
+    # ── /attach request ─────────────────────────────────────────────
+
+    AttachRequest:
+      type: object
+      required:
+        - item_key
+        - title
+      properties:
+        item_key:
+          $ref: '#/components/schemas/ItemKey'
+        title:
+          $ref: '#/components/schemas/NonBlankString'
+        file_path:
+          $ref: '#/components/schemas/NonBlankString'
+        file_name:
+          $ref: '#/components/schemas/NonBlankString'
+        file_bytes_base64:
+          allOf:
+            - $ref: '#/components/schemas/NonBlankString'
+          contentEncoding: base64
+          description: >
+            Base64-encoded file bytes. Must be non-blank: the endpoint reads it
+            with the same trim-to-null rule as the other optional strings, so a
+            blank value counts as absent and fails the anyOf below rather than
+            being accepted as bytes.
+      allOf:
+        - description: >
+            Either file_path is present, or both file_name and file_bytes_base64
+            are present. This allows path-only, bytes-only, and path+bytes
+            fallback (where file_name is optional because runtime can use the
+            path basename).
+          anyOf:
+            - required:
+                - file_path
+            - required:
+                - file_name
+                - file_bytes_base64
+
+    # ── /attach success response ────────────────────────────────────
+
+    AttachSuccessResponse:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required:
+            - attachment_key
+            - attachment_id
+            - message
+            - handler
+          properties:
+            attachment_key:
+              type: string
+            attachment_id:
+              type: integer
+            message:
+              type: string
+            handler:
+              const: fulltext-attach
+            details:
+              type: object
+              required:
+                - parent_item_key
+                - file_path
+                - source_mode
+                - title
+              properties:
+                parent_item_key:
+                  type: string
+                file_path:
+                  type:
+                    - string
+                    - 'null'
+                source_mode:
+                  enum:
+                    - path
+                    - bytes
+                    - bytes_fallback
+                title:
+                  type: string
+      unevaluatedProperties: false
+
+    # ── /write request union ────────────────────────────────────────
+
+    WriteRequest:
+      oneOf:
+        - $ref: '#/components/schemas/SyncRequest'
+        - $ref: '#/components/schemas/RunJavascriptRequest'
+        - $ref: '#/components/schemas/UpdateItemFieldsRequest'
+        - $ref: '#/components/schemas/ReplaceItemJsonRequest'
+        - $ref: '#/components/schemas/SetItemTagsRequest'
+        - $ref: '#/components/schemas/AddItemTagsRequest'
+        - $ref: '#/components/schemas/RemoveItemTagsRequest'
+        - $ref: '#/components/schemas/SetItemCollectionsRequest'
+        - $ref: '#/components/schemas/AddItemToCollectionRequest'
+        - $ref: '#/components/schemas/RemoveItemFromCollectionRequest'
+        - $ref: '#/components/schemas/AttachNoteRequest'
+        - $ref: '#/components/schemas/UpdateNoteRequest'
+        - $ref: '#/components/schemas/AttachUrlRequest'
+        - $ref: '#/components/schemas/TrashItemRequest'
+        - $ref: '#/components/schemas/TrashCollectionRequest'
+        - $ref: '#/components/schemas/RelinkAttachmentFileRequest'
+        - $ref: '#/components/schemas/CreateCollectionRequest'
+        - $ref: '#/components/schemas/RenameCollectionRequest'
+        - $ref: '#/components/schemas/MoveCollectionRequest'
+        - $ref: '#/components/schemas/MergeCollectionsRequest'
+        - $ref: '#/components/schemas/RenameTagRequest'
+        - $ref: '#/components/schemas/MergeTagsRequest'
+        - $ref: '#/components/schemas/DeleteTagRequest'
+        - $ref: '#/components/schemas/DeleteUnusedTagsRequest'
+        - $ref: '#/components/schemas/CopyItemRequest'
+        - $ref: '#/components/schemas/MergeItemsRequest'
+        - $ref: '#/components/schemas/CreateItemRequest'
+        - $ref: '#/components/schemas/ImportBibtexRequest'
+        - $ref: '#/components/schemas/ImportByIdentifierRequest'
+        - $ref: '#/components/schemas/GetSelectedCollectionRequest'
+        - $ref: '#/components/schemas/RestoreItemRequest'
+        - $ref: '#/components/schemas/UpdateAttachmentTitleRequest'
+      discriminator:
+        propertyName: operation
+        mapping:
+          sync: '#/components/schemas/SyncRequest'
+          run_javascript: '#/components/schemas/RunJavascriptRequest'
+          update_item_fields: '#/components/schemas/UpdateItemFieldsRequest'
+          replace_item_json: '#/components/schemas/ReplaceItemJsonRequest'
+          set_item_tags: '#/components/schemas/SetItemTagsRequest'
+          add_item_tags: '#/components/schemas/AddItemTagsRequest'
+          remove_item_tags: '#/components/schemas/RemoveItemTagsRequest'
+          set_item_collections: '#/components/schemas/SetItemCollectionsRequest'
+          add_item_to_collection: '#/components/schemas/AddItemToCollectionRequest'
+          remove_item_from_collection: '#/components/schemas/RemoveItemFromCollectionRequest'
+          attach_note: '#/components/schemas/AttachNoteRequest'
+          update_note: '#/components/schemas/UpdateNoteRequest'
+          attach_url: '#/components/schemas/AttachUrlRequest'
+          trash_item: '#/components/schemas/TrashItemRequest'
+          trash_collection: '#/components/schemas/TrashCollectionRequest'
+          relink_attachment_file: '#/components/schemas/RelinkAttachmentFileRequest'
+          create_collection: '#/components/schemas/CreateCollectionRequest'
+          rename_collection: '#/components/schemas/RenameCollectionRequest'
+          move_collection: '#/components/schemas/MoveCollectionRequest'
+          merge_collections: '#/components/schemas/MergeCollectionsRequest'
+          rename_tag: '#/components/schemas/RenameTagRequest'
+          merge_tags: '#/components/schemas/MergeTagsRequest'
+          delete_tag: '#/components/schemas/DeleteTagRequest'
+          delete_unused_tags: '#/components/schemas/DeleteUnusedTagsRequest'
+          copy_item: '#/components/schemas/CopyItemRequest'
+          merge_items: '#/components/schemas/MergeItemsRequest'
+          create_item: '#/components/schemas/CreateItemRequest'
+          import_bibtex: '#/components/schemas/ImportBibtexRequest'
+          import_by_identifier: '#/components/schemas/ImportByIdentifierRequest'
+          get_selected_collection: '#/components/schemas/GetSelectedCollectionRequest'
+          restore_item: '#/components/schemas/RestoreItemRequest'
+          update_attachment_title: '#/components/schemas/UpdateAttachmentTitleRequest'
+
+    # ── Request schemas (one per operation) ────────────────────────
+
+    SyncRequest:
+      type: object
+      required:
+        - operation
+      properties:
+        operation:
+          const: sync
+
+    RunJavascriptRequest:
+      type: object
+      required:
+        - operation
+        - code
+      properties:
+        operation:
+          const: run_javascript
+        code:
+          type: string
+          description: Arbitrary JavaScript to evaluate in the add-on's privileged scope.
+      x-dangerous: true
+      description: >
+        DANGEROUS: Evaluates arbitrary JavaScript in the add-on's privileged
+        chrome scope with full Zotero access. Single-user dev tool. Do NOT
+        expose to untrusted clients. Authentication/feature-gating hardening
+        is a separate concern.
+
+    UpdateItemFieldsRequest:
+      type: object
+      required:
+        - operation
+        - item_key
+        - fields
+      properties:
+        operation:
+          const: update_item_fields
+        item_key:
+          $ref: '#/components/schemas/ItemKey'
+        fields:
+          type: object
+          additionalProperties: true
+
+    ReplaceItemJsonRequest:
+      type: object
+      required:
+        - operation
+        - item_key
+        - item_json
+      properties:
+        operation:
+          const: replace_item_json
+        item_key:
+          $ref: '#/components/schemas/ItemKey'
+        item_json:
+          type: object
+          additionalProperties: true
+
+    SetItemTagsRequest:
+      type: object
+      required:
+        - operation
+        - item_key
+        - tags
+      properties:
+        operation:
+          const: set_item_tags
+        item_key:
+          $ref: '#/components/schemas/ItemKey'
+        tags:
+          $ref: '#/components/schemas/NormalizedStringArray'
+
+    AddItemTagsRequest:
+      type: object
+      required:
+        - operation
+        - item_key
+        - tags
+      properties:
+        operation:
+          const: add_item_tags
+        item_key:
+          $ref: '#/components/schemas/ItemKey'
+        tags:
+          $ref: '#/components/schemas/NormalizedStringArray'
+
+    RemoveItemTagsRequest:
+      type: object
+      required:
+        - operation
+        - item_key
+        - tags
+      properties:
+        operation:
+          const: remove_item_tags
+        item_key:
+          $ref: '#/components/schemas/ItemKey'
+        tags:
+          $ref: '#/components/schemas/NormalizedStringArray'
+
+    SetItemCollectionsRequest:
+      type: object
+      required:
+        - operation
+        - item_key
+        - collection_keys
+      properties:
+        operation:
+          const: set_item_collections
+        item_key:
+          $ref: '#/components/schemas/ItemKey'
+        collection_keys:
+          $ref: '#/components/schemas/NormalizedStringArray'
+
+    AddItemToCollectionRequest:
+      type: object
+      required:
+        - operation
+        - item_key
+        - collection_key
+      properties:
+        operation:
+          const: add_item_to_collection
+        item_key:
+          $ref: '#/components/schemas/ItemKey'
+        collection_key:
+          $ref: '#/components/schemas/CollectionKey'
+
+    RemoveItemFromCollectionRequest:
+      type: object
+      required:
+        - operation
+        - item_key
+        - collection_key
+      properties:
+        operation:
+          const: remove_item_from_collection
+        item_key:
+          $ref: '#/components/schemas/ItemKey'
+        collection_key:
+          $ref: '#/components/schemas/CollectionKey'
+
+    AttachNoteRequest:
+      type: object
+      required:
+        - operation
+        - parent_item_key
+        - note_text
+      properties:
+        operation:
+          const: attach_note
+        parent_item_key:
+          $ref: '#/components/schemas/ItemKey'
+        note_text:
+          type: string
+          description: Note body. May be an empty string.
+        title:
+          type: string
+
+    UpdateNoteRequest:
+      type: object
+      required:
+        - operation
+        - note_key
+        - new_content
+      properties:
+        operation:
+          const: update_note
+        note_key:
+          $ref: '#/components/schemas/ItemKey'
+        new_content:
+          type: string
+          description: New note content. May be an empty string.
+
+    AttachUrlRequest:
+      type: object
+      required:
+        - operation
+        - parent_item_key
+        - url
+      properties:
+        operation:
+          const: attach_url
+        parent_item_key:
+          $ref: '#/components/schemas/ItemKey'
+        url:
+          $ref: '#/components/schemas/NonBlankString'
+        title:
+          $ref: '#/components/schemas/NonBlankString'
+
+    TrashItemRequest:
+      type: object
+      required:
+        - operation
+        - item_key
+      properties:
+        operation:
+          const: trash_item
+        item_key:
+          $ref: '#/components/schemas/ItemKey'
+
+    TrashCollectionRequest:
+      type: object
+      required:
+        - operation
+        - collection_key
+      properties:
+        operation:
+          const: trash_collection
+        collection_key:
+          $ref: '#/components/schemas/CollectionKey'
+
+    RelinkAttachmentFileRequest:
+      type: object
+      required:
+        - operation
+        - attachment_key
+        - file_path
+      properties:
+        operation:
+          const: relink_attachment_file
+        attachment_key:
+          $ref: '#/components/schemas/ItemKey'
+        file_path:
+          $ref: '#/components/schemas/NonBlankString'
+
+    CreateCollectionRequest:
+      type: object
+      required:
+        - operation
+        - name
+      properties:
+        operation:
+          const: create_collection
+        name:
+          $ref: '#/components/schemas/NonBlankString'
+        parent_key:
+          $ref: '#/components/schemas/CollectionKey'
+
+    RenameCollectionRequest:
+      type: object
+      required:
+        - operation
+        - collection_key
+        - new_name
+      properties:
+        operation:
+          const: rename_collection
+        collection_key:
+          $ref: '#/components/schemas/CollectionKey'
+        new_name:
+          $ref: '#/components/schemas/NonBlankString'
+
+    MoveCollectionRequest:
+      type: object
+      required:
+        - operation
+        - collection_key
+      properties:
+        operation:
+          const: move_collection
+        collection_key:
+          $ref: '#/components/schemas/CollectionKey'
+        new_parent_key:
+          $ref: '#/components/schemas/CollectionKey'
+
+    MergeCollectionsRequest:
+      type: object
+      required:
+        - operation
+        - source_keys
+        - target_key
+      properties:
+        operation:
+          const: merge_collections
+        source_keys:
+          $ref: '#/components/schemas/NormalizedStringArray'
+        target_key:
+          $ref: '#/components/schemas/CollectionKey'
+
+    RenameTagRequest:
+      type: object
+      required:
+        - operation
+        - old_name
+        - new_name
+      properties:
+        operation:
+          const: rename_tag
+        old_name:
+          $ref: '#/components/schemas/NonBlankString'
+        new_name:
+          $ref: '#/components/schemas/NonBlankString'
+
+    MergeTagsRequest:
+      type: object
+      required:
+        - operation
+        - source_tags
+        - target_tag
+      properties:
+        operation:
+          const: merge_tags
+        source_tags:
+          $ref: '#/components/schemas/NormalizedStringArray'
+        target_tag:
+          $ref: '#/components/schemas/NonBlankString'
+
+    DeleteTagRequest:
+      type: object
+      required:
+        - operation
+        - tag_name
+      properties:
+        operation:
+          const: delete_tag
+        tag_name:
+          $ref: '#/components/schemas/NonBlankString'
+
+    DeleteUnusedTagsRequest:
+      type: object
+      required:
+        - operation
+      properties:
+        operation:
+          const: delete_unused_tags
+
+    CopyItemRequest:
+      type: object
+      required:
+        - operation
+        - item_key
+      properties:
+        operation:
+          const: copy_item
+        item_key:
+          $ref: '#/components/schemas/ItemKey'
+
+    MergeItemsRequest:
+      type: object
+      required:
+        - operation
+        - source_key
+        - target_key
+      properties:
+        operation:
+          const: merge_items
+        source_key:
+          $ref: '#/components/schemas/ItemKey'
+        target_key:
+          $ref: '#/components/schemas/ItemKey'
+
+    CreateItemRequest:
+      type: object
+      required:
+        - operation
+        - item_type
+      properties:
+        operation:
+          const: create_item
+        item_type:
+          $ref: '#/components/schemas/NonBlankString'
+        fields:
+          type: object
+          additionalProperties: true
+        tags:
+          $ref: '#/components/schemas/NormalizedStringArray'
+        collection_keys:
+          $ref: '#/components/schemas/NormalizedStringArray'
+
+    ImportBibtexRequest:
+      type: object
+      required:
+        - operation
+        - bibtex
+      properties:
+        operation:
+          const: import_bibtex
+        bibtex:
+          $ref: '#/components/schemas/NonBlankString'
+        collection_keys:
+          $ref: '#/components/schemas/NormalizedStringArray'
+
+    ImportByIdentifierRequest:
+      type: object
+      required:
+        - operation
+        - identifier
+      properties:
+        operation:
+          const: import_by_identifier
+        identifier:
+          $ref: '#/components/schemas/NonBlankString'
+        collection_keys:
+          $ref: '#/components/schemas/NormalizedStringArray'
+
+    GetSelectedCollectionRequest:
+      type: object
+      required:
+        - operation
+      properties:
+        operation:
+          const: get_selected_collection
+
+    RestoreItemRequest:
+      type: object
+      required:
+        - operation
+        - item_key
+      properties:
+        operation:
+          const: restore_item
+        item_key:
+          $ref: '#/components/schemas/ItemKey'
+
+    UpdateAttachmentTitleRequest:
+      type: object
+      required:
+        - operation
+        - attachment_key
+        - new_title
+      properties:
+        operation:
+          const: update_attachment_title
+        attachment_key:
+          $ref: '#/components/schemas/ItemKey'
+        new_title:
+          $ref: '#/components/schemas/NonBlankString'
+
+    # ── /write success response union ──────────────────────────────
+
+    WriteSuccessResponse:
+      oneOf:
+        - $ref: '#/components/schemas/SyncSuccess'
+        - $ref: '#/components/schemas/RunJavascriptSuccess'
+        - $ref: '#/components/schemas/UpdateItemFieldsSuccess'
+        - $ref: '#/components/schemas/ReplaceItemJsonSuccess'
+        - $ref: '#/components/schemas/SetItemTagsSuccess'
+        - $ref: '#/components/schemas/AddItemTagsSuccess'
+        - $ref: '#/components/schemas/RemoveItemTagsSuccess'
+        - $ref: '#/components/schemas/SetItemCollectionsSuccess'
+        - $ref: '#/components/schemas/AddItemToCollectionSuccess'
+        - $ref: '#/components/schemas/RemoveItemFromCollectionSuccess'
+        - $ref: '#/components/schemas/AttachNoteSuccess'
+        - $ref: '#/components/schemas/UpdateNoteSuccess'
+        - $ref: '#/components/schemas/AttachUrlSuccess'
+        - $ref: '#/components/schemas/TrashItemSuccess'
+        - $ref: '#/components/schemas/TrashCollectionSuccess'
+        - $ref: '#/components/schemas/RelinkAttachmentFileSuccess'
+        - $ref: '#/components/schemas/CreateCollectionSuccess'
+        - $ref: '#/components/schemas/RenameCollectionSuccess'
+        - $ref: '#/components/schemas/MoveCollectionSuccess'
+        - $ref: '#/components/schemas/MergeCollectionsSuccess'
+        - $ref: '#/components/schemas/RenameTagSuccess'
+        - $ref: '#/components/schemas/MergeTagsSuccess'
+        - $ref: '#/components/schemas/DeleteTagSuccess'
+        - $ref: '#/components/schemas/DeleteUnusedTagsSuccess'
+        - $ref: '#/components/schemas/CopyItemSuccess'
+        - $ref: '#/components/schemas/MergeItemsSuccess'
+        - $ref: '#/components/schemas/CreateItemSuccess'
+        - $ref: '#/components/schemas/ImportBibtexSuccess'
+        - $ref: '#/components/schemas/ImportByIdentifierSuccess'
+        - $ref: '#/components/schemas/GetSelectedCollectionSuccess'
+        - $ref: '#/components/schemas/RestoreItemSuccess'
+        - $ref: '#/components/schemas/UpdateAttachmentTitleSuccess'
+      discriminator:
+        propertyName: operation
+        mapping:
+          sync: '#/components/schemas/SyncSuccess'
+          run_javascript: '#/components/schemas/RunJavascriptSuccess'
+          update_item_fields: '#/components/schemas/UpdateItemFieldsSuccess'
+          replace_item_json: '#/components/schemas/ReplaceItemJsonSuccess'
+          set_item_tags: '#/components/schemas/SetItemTagsSuccess'
+          add_item_tags: '#/components/schemas/AddItemTagsSuccess'
+          remove_item_tags: '#/components/schemas/RemoveItemTagsSuccess'
+          set_item_collections: '#/components/schemas/SetItemCollectionsSuccess'
+          add_item_to_collection: '#/components/schemas/AddItemToCollectionSuccess'
+          remove_item_from_collection: '#/components/schemas/RemoveItemFromCollectionSuccess'
+          attach_note: '#/components/schemas/AttachNoteSuccess'
+          update_note: '#/components/schemas/UpdateNoteSuccess'
+          attach_url: '#/components/schemas/AttachUrlSuccess'
+          trash_item: '#/components/schemas/TrashItemSuccess'
+          trash_collection: '#/components/schemas/TrashCollectionSuccess'
+          relink_attachment_file: '#/components/schemas/RelinkAttachmentFileSuccess'
+          create_collection: '#/components/schemas/CreateCollectionSuccess'
+          rename_collection: '#/components/schemas/RenameCollectionSuccess'
+          move_collection: '#/components/schemas/MoveCollectionSuccess'
+          merge_collections: '#/components/schemas/MergeCollectionsSuccess'
+          rename_tag: '#/components/schemas/RenameTagSuccess'
+          merge_tags: '#/components/schemas/MergeTagsSuccess'
+          delete_tag: '#/components/schemas/DeleteTagSuccess'
+          delete_unused_tags: '#/components/schemas/DeleteUnusedTagsSuccess'
+          copy_item: '#/components/schemas/CopyItemSuccess'
+          merge_items: '#/components/schemas/MergeItemsSuccess'
+          create_item: '#/components/schemas/CreateItemSuccess'
+          import_bibtex: '#/components/schemas/ImportBibtexSuccess'
+          import_by_identifier: '#/components/schemas/ImportByIdentifierSuccess'
+          get_selected_collection: '#/components/schemas/GetSelectedCollectionSuccess'
+          restore_item: '#/components/schemas/RestoreItemSuccess'
+          update_attachment_title: '#/components/schemas/UpdateAttachmentTitleSuccess'
+
+    # ── Success schemas (one per operation) ────────────────────────
+
+    SyncSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            operation:
+              const: sync
+            details:
+              type: object
+              required:
+                - triggered
+                - result
+              properties:
+                triggered:
+                  const: true
+                result: {}
+      unevaluatedProperties: false
+
+    RunJavascriptSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            operation:
+              const: run_javascript
+            details:
+              type: object
+              required:
+                - result
+              properties:
+                result: {}
+      unevaluatedProperties: false
+
+    UpdateItemFieldsSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            operation:
+              const: update_item_fields
+            details:
+              type: object
+              required:
+                - item_key
+                - field_names
+              properties:
+                item_key:
+                  type: string
+                field_names:
+                  type: array
+                  items:
+                    type: string
+      unevaluatedProperties: false
+
+    ReplaceItemJsonSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            operation:
+              const: replace_item_json
+            details:
+              type: object
+              required:
+                - item_key
+                - item_type
+              properties:
+                item_key:
+                  type: string
+                item_type:
+                  type: string
+      unevaluatedProperties: false
+
+    SetItemTagsSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            operation:
+              const: set_item_tags
+            details:
+              type: object
+              required:
+                - item_key
+                - tags
+                - tag_count
+              properties:
+                item_key:
+                  type: string
+                tags:
+                  type: array
+                  items:
+                    type: string
+                tag_count:
+                  type: integer
+      unevaluatedProperties: false
+
+    AddItemTagsSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            operation:
+              const: add_item_tags
+            details:
+              type: object
+              required:
+                - item_key
+                - added_tags
+                - total_tag_count
+              properties:
+                item_key:
+                  type: string
+                added_tags:
+                  type: array
+                  items:
+                    type: string
+                total_tag_count:
+                  type: integer
+      unevaluatedProperties: false
+
+    RemoveItemTagsSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            operation:
+              const: remove_item_tags
+            details:
+              type: object
+              required:
+                - item_key
+                - removed_count
+                - remaining_tag_count
+              properties:
+                item_key:
+                  type: string
+                removed_count:
+                  type: integer
+                remaining_tag_count:
+                  type: integer
+      unevaluatedProperties: false
+
+    SetItemCollectionsSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            operation:
+              const: set_item_collections
+            details:
+              type: object
+              required:
+                - item_key
+                - collection_keys
+              properties:
+                item_key:
+                  type: string
+                collection_keys:
+                  type: array
+                  items:
+                    type: string
+      unevaluatedProperties: false
+
+    AddItemToCollectionSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            operation:
+              const: add_item_to_collection
+            details:
+              type: object
+              required:
+                - item_key
+                - collection_key
+                - collection_name
+              properties:
+                item_key:
+                  type: string
+                collection_key:
+                  type: string
+                collection_name:
+                  type: string
+      unevaluatedProperties: false
+
+    RemoveItemFromCollectionSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            operation:
+              const: remove_item_from_collection
+            details:
+              type: object
+              required:
+                - item_key
+                - collection_key
+                - collection_name
+              properties:
+                item_key:
+                  type: string
+                collection_key:
+                  type: string
+                collection_name:
+                  type: string
+      unevaluatedProperties: false
+
+    AttachNoteSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required:
+            - note_key
+            - note_id
+          properties:
+            operation:
+              const: attach_note
+            note_key:
+              type: string
+            note_id:
+              type: integer
+            details:
+              type: object
+              required:
+                - parent_item_key
+                - note_length
+                - title
+              properties:
+                parent_item_key:
+                  type: string
+                note_length:
+                  type: integer
+                title:
+                  type:
+                    - string
+                    - 'null'
+      unevaluatedProperties: false
+
+    UpdateNoteSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            operation:
+              const: update_note
+            details:
+              type: object
+              required:
+                - note_key
+                - parent_item_key
+                - content_length
+              properties:
+                note_key:
+                  type: string
+                parent_item_key:
+                  type:
+                    - string
+                    - 'null'
+                content_length:
+                  type: integer
+      unevaluatedProperties: false
+
+    AttachUrlSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required:
+            - attachment_key
+            - attachment_id
+          properties:
+            operation:
+              const: attach_url
+            attachment_key:
+              type: string
+            attachment_id:
+              type: integer
+            details:
+              type: object
+              required:
+                - parent_item_key
+                - url
+                - title
+              properties:
+                parent_item_key:
+                  type: string
+                url:
+                  type: string
+                title:
+                  type:
+                    - string
+                    - 'null'
+      unevaluatedProperties: false
+
+    TrashItemSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            operation:
+              const: trash_item
+            details:
+              type: object
+              required:
+                - item_key
+                - item_type
+              properties:
+                item_key:
+                  type: string
+                item_type:
+                  type: string
+      unevaluatedProperties: false
+
+    TrashCollectionSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            operation:
+              const: trash_collection
+            details:
+              $ref: '#/components/schemas/CollectionDetails'
+      unevaluatedProperties: false
+
+    RelinkAttachmentFileSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            operation:
+              const: relink_attachment_file
+            details:
+              type: object
+              required:
+                - attachment_key
+                - file_path
+              properties:
+                attachment_key:
+                  type: string
+                file_path:
+                  type: string
+      unevaluatedProperties: false
+
+    CreateCollectionSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            operation:
+              const: create_collection
+            details:
+              $ref: '#/components/schemas/CollectionDetails'
+      unevaluatedProperties: false
+
+    RenameCollectionSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            operation:
+              const: rename_collection
+            details:
+              $ref: '#/components/schemas/CollectionDetails'
+      unevaluatedProperties: false
+
+    MoveCollectionSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            operation:
+              const: move_collection
+            details:
+              $ref: '#/components/schemas/CollectionDetails'
+      unevaluatedProperties: false
+
+    MergeCollectionsSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            operation:
+              const: merge_collections
+            details:
+              type: object
+              required:
+                - source_keys
+                - target_key
+                - moved_item_count
+                - moved_child_collection_count
+                - trashed_source_count
+              properties:
+                source_keys:
+                  type: array
+                  items:
+                    type: string
+                target_key:
+                  type: string
+                moved_item_count:
+                  type: integer
+                moved_child_collection_count:
+                  type: integer
+                trashed_source_count:
+                  type: integer
+      unevaluatedProperties: false
+
+    RenameTagSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            operation:
+              const: rename_tag
+            details:
+              type: object
+              required:
+                - old_name
+                - new_name
+              properties:
+                old_name:
+                  type: string
+                new_name:
+                  type: string
+      unevaluatedProperties: false
+
+    MergeTagsSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            operation:
+              const: merge_tags
+            details:
+              type: object
+              required:
+                - source_tags
+                - target_tag
+              properties:
+                source_tags:
+                  type: array
+                  items:
+                    type: string
+                target_tag:
+                  type: string
+      unevaluatedProperties: false
+
+    DeleteTagSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            operation:
+              const: delete_tag
+            details:
+              type: object
+              required:
+                - tag_name
+                - modified_item_count
+              properties:
+                tag_name:
+                  type: string
+                modified_item_count:
+                  type: integer
+      unevaluatedProperties: false
+
+    DeleteUnusedTagsSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            operation:
+              const: delete_unused_tags
+            details:
+              type: object
+              required: []
+      unevaluatedProperties: false
+
+    CopyItemSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required:
+            - new_key
+            - new_item_key
+          properties:
+            operation:
+              const: copy_item
+            new_key:
+              type: string
+            new_item_key:
+              type: string
+            details:
+              type: object
+              required:
+                - item_key
+                - copied_note_count
+                - copied_attachment_count
+              properties:
+                item_key:
+                  type: string
+                copied_note_count:
+                  type: integer
+                copied_attachment_count:
+                  type: integer
+      unevaluatedProperties: false
+
+    MergeItemsSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            operation:
+              const: merge_items
+            details:
+              type: object
+              required:
+                - source_key
+                - target_key
+                - transferred
+              properties:
+                source_key:
+                  type: string
+                target_key:
+                  type: string
+                transferred:
+                  type: object
+                  required:
+                    - attachments
+                    - notes
+                    - tags
+                    - relations
+                  properties:
+                    attachments:
+                      type: integer
+                    notes:
+                      type: integer
+                    tags:
+                      type: integer
+                    relations:
+                      type: integer
+      unevaluatedProperties: false
+
+    CreateItemSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required:
+            - item_key
+            - item_id
+          properties:
+            operation:
+              const: create_item
+            item_key:
+              type: string
+            item_id:
+              type: integer
+            details:
+              type: object
+              required:
+                - item_type
+                - field_names
+                - tag_count
+                - collection_count
+              properties:
+                item_type:
+                  type: string
+                field_names:
+                  type: array
+                  items:
+                    type: string
+                tag_count:
+                  type: integer
+                collection_count:
+                  type: integer
+      unevaluatedProperties: false
+
+    ImportBibtexSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required:
+            - item_key
+            - item_id
+            - item_keys
+            - item_ids
+            - titles
+          properties:
+            operation:
+              const: import_bibtex
+            item_key:
+              type: string
+            item_id:
+              type: integer
+            item_keys:
+              type: array
+              items:
+                type: string
+            item_ids:
+              type: array
+              items:
+                type: integer
+            titles:
+              type: array
+              items:
+                type: string
+            details:
+              type: object
+              required:
+                - item_count
+                - collection_keys
+                - translator_id
+              properties:
+                item_count:
+                  type: integer
+                collection_keys:
+                  type: array
+                  items:
+                    type: string
+                translator_id:
+                  type: string
+      unevaluatedProperties: false
+
+    ImportByIdentifierSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          required:
+            - item_key
+            - item_id
+            - item_keys
+            - item_ids
+            - titles
+          properties:
+            operation:
+              const: import_by_identifier
+            item_key:
+              type: string
+            item_id:
+              type: integer
+            item_keys:
+              type: array
+              items:
+                type: string
+            item_ids:
+              type: array
+              items:
+                type: integer
+            titles:
+              type: array
+              items:
+                type: string
+            details:
+              type: object
+              required:
+                - identifier
+                - item_count
+                - collection_keys
+              properties:
+                identifier:
+                  type: string
+                item_count:
+                  type: integer
+                collection_keys:
+                  type: array
+                  items:
+                    type: string
+      unevaluatedProperties: false
+
+    GetSelectedCollectionSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            operation:
+              const: get_selected_collection
+            details:
+              type: object
+              required:
+                - collection_key
+                - collection_name
+              properties:
+                collection_key:
+                  type: string
+                collection_name:
+                  type: string
+      unevaluatedProperties: false
+
+    RestoreItemSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            operation:
+              const: restore_item
+            details:
+              type: object
+              required:
+                - item_key
+                - item_type
+              properties:
+                item_key:
+                  type: string
+                item_type:
+                  type: string
+      unevaluatedProperties: false
+
+    UpdateAttachmentTitleSuccess:
+      allOf:
+        - $ref: '#/components/schemas/SuccessEnvelope'
+        - type: object
+          properties:
+            operation:
+              const: update_attachment_title
+            details:
+              type: object
+              required:
+                - attachment_key
+                - new_title
+              properties:
+                attachment_key:
+                  type: string
+                new_title:
+                  type: string
+      unevaluatedProperties: false

@@ -1,0 +1,24 @@
+# Schemathesis configuration for the generic live fuzzing run.
+#
+# The generic run targets the canonical openapi.yaml directly against a live
+# Zotero. Because every write variant is the same POST /write operation and the
+# tests share one Zotero process, a single worker is used so scenarios do not
+# interleave.
+
+base-url = "http://127.0.0.1:23119"
+workers = 1
+
+[generation]
+# Exercise both valid (positive) and invalid (negative) data so that both
+# positive_data_acceptance and negative_data_rejection have cases to check.
+mode = "all"
+
+# Enable exactly the checks the contract must satisfy; nothing implicit.
+[checks]
+enabled = false
+not_a_server_error.enabled = true
+status_code_conformance.enabled = true
+content_type_conformance.enabled = true
+response_schema_conformance.enabled = true
+negative_data_rejection.enabled = true
+positive_data_acceptance.enabled = true

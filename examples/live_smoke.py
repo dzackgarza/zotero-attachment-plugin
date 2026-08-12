@@ -119,14 +119,11 @@ def _wait_for_deleted(base_url: str, library_id: str, item_key: str, *, timeout:
 def _cleanup_item(base_url: str, write_path: str, item_key: str | None) -> None:
     if not item_key:
         return
-    try:
-        _post_write(
-            base_url,
-            write_path,
-            {"operation": "trash_item", "item_key": item_key},
-        )
-    except Exception:
-        pass
+    _post_write(
+        base_url,
+        write_path,
+        {"operation": "trash_item", "item_key": item_key},
+    )
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
