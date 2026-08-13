@@ -197,7 +197,11 @@ function bearerAuthFailure(request: EndpointRequest): EndpointResult | null {
     401,
     "application/json",
     JSON.stringify(
-      errorResult("authorize", "auth", "Missing or invalid bearer token", {}),
+      // details.request echoes the body per the ErrorResponse schema; the 401
+      // is documented on /write and /attach in openapi.yaml.
+      errorResult("authorize", "auth", "Missing or invalid bearer token", {
+        request: request.data,
+      }),
     ),
   ];
 }
@@ -1534,8 +1538,22 @@ async function openApiSpecText(): Promise<string> {
   let publicBaseUrl = Zotero.Prefs.get(PUBLIC_BASE_URL_PREF, true);
   if (typeof publicBaseUrl === "string" && publicBaseUrl !== "") {
     // The spec's single server entry is the loopback URL; a set pref rewrites
-    // it so a schema imported by URL points at the tunnel hostname.
-    return text.replace("http://127.0.0.1:23119", publicBaseUrl);
+    // it so a schema imported by URL points at the tunnel hostname. Fail loud
+    // if that exact server line is absent rather than silently serving a spec
+    // that still points at loopback — the whole point of the pref is to not do
+    // that.
+    let loopbackServer = "url: http://127.0.0.1:23119";
+    if (!text.includes(loopbackServer)) {
+      throw new Error(
+        "openapi.yaml has no '" +
+          loopbackServer +
+          "' server entry to rewrite for publicBaseURL",
+      );
+    }
+    return text.replace(
+      loopbackServer,
+      "url: " + publicBaseUrl.replace(/\/+$/, ""),
+    );
   }
   return text;
 }

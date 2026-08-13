@@ -62,6 +62,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Missing or invalid bearer token (when the localWriteAPI.token pref is set).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
       security:
         - bearerAuth: []
   /write:
@@ -101,6 +107,12 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '500':
           description: Unexpected server error.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Missing or invalid bearer token (when the localWriteAPI.token pref is set).
           content:
             application/json:
               schema:

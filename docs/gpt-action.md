@@ -27,8 +27,7 @@ Two layers do the guarding:
   With the pref unset the plugin behaves exactly as before (loopback-only, no auth).
 
 The plugin cannot tell a loopback request from a tunnelled one — cloudflared forwards to `127.0.0.1:23119`, so both look identical to Zotero's server.
-So "unset pref = open" is safe only on loopback, and the guard that a public write surface is never left unauthenticated lives at the deployment boundary: **`just tunnel-setup` and `just tunnel-install` refuse to run unless the token pref is set** (they read it from the profile's `prefs.js`).
-The add-on also logs its auth state at startup (`Bearer auth ENABLED`/`DISABLED`).
+So "unset pref = open" is safe only on loopback, and the guard that a public write surface is never left unauthenticated lives at the deployment boundary: **`just tunnel-setup` and `just tunnel-install` refuse to run unless the token pref is set** (they read it from the profile's `prefs.js`). The add-on also logs its auth state at startup (`Bearer auth ENABLED`/`DISABLED`).
 
 There is no Cloudflare Access policy in front, deliberately: Access needs two headers (`CF-Access-Client-Id`/`-Secret`) and a Custom GPT Action can send exactly one credential.
 

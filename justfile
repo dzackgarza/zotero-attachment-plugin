@@ -375,6 +375,16 @@ _bump bump_type:
         patch += 1
     new = f"{major}.{minor}.{patch}"
     path.write_text(new + "\n")
+    # openapi.yaml's info.version is served at /openapi.yaml and asserted equal
+    # to VERSION by the contract test, so it must move in lockstep.
+    spec = Path("openapi.yaml")
+    spec_text = spec.read_text()
+    spec_new, count = re.subn(
+        r"^(  version: )'[^']*'", rf"\g<1>'{new}'", spec_text, count=1, flags=re.M
+    )
+    if count != 1:
+        sys.exit("Could not find info.version in openapi.yaml to bump")
+    spec.write_text(spec_new)
     print(f"Bumped to {new}")
 
 _release bump_type: (_bump bump_type)
@@ -383,9 +393,9 @@ _release bump_type: (_bump bump_type)
     echo "Required before tagging: install the current working-tree XPI and run 'just smoke-live'" >&2
     bun run typecheck
     bun run lint
-    python3 build.py
+    uv run build.py
     version=$(cat VERSION)
-    git add VERSION updates.json
+    git add VERSION updates.json openapi.yaml src/generated/openapi.ts
     git commit -m "chore: release v${version}"
     git tag "v${version}"
     git push

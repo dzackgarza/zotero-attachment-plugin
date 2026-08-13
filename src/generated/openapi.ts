@@ -984,6 +984,15 @@ export interface operations {
                     "application/json": components["schemas"]["ErrorResponse"];
                 };
             };
+            /** @description Missing or invalid bearer token (when the localWriteAPI.token pref is set). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
             /** @description Parent item or file not found. */
             404: {
                 headers: {
@@ -1028,6 +1037,15 @@ export interface operations {
             };
             /** @description Malformed request, missing fields, unsupported operation. */
             400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ErrorResponse"];
+                };
+            };
+            /** @description Missing or invalid bearer token (when the localWriteAPI.token pref is set). */
+            401: {
                 headers: {
                     [name: string]: unknown;
                 };
