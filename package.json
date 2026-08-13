@@ -16,7 +16,6 @@
   "devDependencies": {
     "@redocly/cli": "^2.39.0",
     "@types/bun": "latest",
-    "@types/js-yaml": "^4.0.9",
     "@zotero-plugin/eslint-config": "^0.6.8",
     "esbuild": "^0.27.3",
     "eslint": "^10.0.3",
