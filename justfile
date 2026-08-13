@@ -420,10 +420,12 @@ _require-write-token:
     #!/usr/bin/env bash
     set -euo pipefail
     base="${ZOTERO_LOCAL_BASE_URL:-http://127.0.0.1:23119}"
-    code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$base/write" \
-        -H 'Content-Type: application/json' -d '{}' || echo 000)
-    if [[ "$code" == "000" ]]; then
-        echo "Refusing: no response from $base/write — is Zotero running?" >&2
+    # curl exits non-zero only on a transport failure (it returns 0 for any HTTP
+    # status, including 401); let that failure propagate loudly instead of
+    # masking it with a sentinel code.
+    if ! code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$base/write" \
+        -H 'Content-Type: application/json' -d '{}'); then
+        echo "Refusing: could not reach $base/write — is Zotero running?" >&2
         exit 1
     fi
     if [[ "$code" != "401" ]]; then
@@ -439,6 +441,21 @@ _require-write-token:
 tunnel-setup: _require-write-token
     #!/usr/bin/env bash
     set -euo pipefail
+    # The ingress path allowlist is the security boundary that keeps Zotero's
+    # unauthenticated read API and connector off the public hostname. It must
+    # equal the plugin's endpoint set (config.yml, the same source build.py
+    # reads), so assert they match and fail loud on drift rather than letting a
+    # new endpoint silently miss the tunnel or a widened regex leak the read API.
+    config_paths=$(yq -r '.endpoints[]' config.yml | sed 's#^/##' | sort | paste -sd,)
+    regex=$(yq -r '.ingress[0].path' dev/cloudflared/zotero-write.yml.template)
+    alt=${regex#^/(}; alt=${alt%)$}
+    ingress_paths=$(printf '%s\n' "${alt//|/$'\n'}" | sed 's#\\\.#.#g' | sort | paste -sd,)
+    if [[ "$config_paths" != "$ingress_paths" ]]; then
+        echo "Tunnel ingress paths are out of sync with config.yml endpoints:" >&2
+        echo "  config.yml: $(echo "$config_paths" | paste -sd' ')" >&2
+        echo "  template:   $(echo "$ingress_paths" | paste -sd' ')" >&2
+        exit 1
+    fi
     if ! cloudflared tunnel list --output json | jq -e --arg n "{{ tunnel_name }}" \
         'map(select(.name == $n)) | length > 0' > /dev/null; then
         cloudflared tunnel create "{{ tunnel_name }}"
