@@ -409,36 +409,31 @@ tunnel_hostname := "zotero-write.dzackgarza.com"
 tunnel_config := home_directory() / ".cloudflared/zotero-write.yml"
 tunnel_unit := "zotero-write-tunnel.service"
 
-# Fail loudly unless the write-API token pref is set in the target Zotero
-# profile. The plugin leaves /write and /attach unauthenticated when the pref
-# is unset (loopback-only default), so the tunnel MUST NOT come up in that
-# state — that would publish the write surface, run_javascript included, with
-# no credential. This is the deployment-boundary guard for that coupling.
+# Fail loudly unless the LIVE write surface actually enforces a bearer token.
+# The plugin leaves /write and /attach unauthenticated when the token pref is
+# unset (loopback-only default), so the tunnel MUST NOT come up in that state —
+# that would publish the write surface, run_javascript included, with no
+# credential. This probes the running plugin (an unauthenticated POST /write
+# must be rejected 401), not the delayed on-disk prefs.js snapshot, so it tracks
+# the same per-request value the plugin enforces.
 _require-write-token:
-    #!/usr/bin/env python3
-    import os, pathlib, re, subprocess, sys
-
-    profile_dir = os.environ.get("ZOTERO_PROFILE_DIR") or subprocess.run(
-        ["just", "_default-profile-dir"], capture_output=True, text=True, check=True
-    ).stdout.strip()
-    prefs = pathlib.Path(profile_dir) / "prefs.js"
-    if not prefs.is_file():
-        sys.exit(f"no prefs.js at {prefs}; start Zotero once so it writes prefs")
-    # prefs.js lines look like: user_pref("extensions.zotero.localWriteAPI.token", "abc");
-    pattern = re.compile(
-        r'user_pref\(\s*"extensions\.zotero\.localWriteAPI\.token"\s*,\s*"([^"]*)"\s*\)'
-    )
-    match = pattern.search(prefs.read_text())
-    if match is None or match.group(1) == "":
-        sys.exit(
-            "write-API token pref is unset in "
-            f"{prefs}.\n"
-            "Set extensions.zotero.localWriteAPI.token in Zotero's Config Editor "
-            "(Settings -> Advanced -> Config Editor) before exposing the tunnel.\n"
-            "Zotero writes prefs.js on a delay, so set the pref, then retry.\n"
-            "See docs/gpt-action.md."
-        )
-    print(f"write-API token pref is set in {prefs}")
+    #!/usr/bin/env bash
+    set -euo pipefail
+    base="${ZOTERO_LOCAL_BASE_URL:-http://127.0.0.1:23119}"
+    code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$base/write" \
+        -H 'Content-Type: application/json' -d '{}' || echo 000)
+    if [[ "$code" == "000" ]]; then
+        echo "Refusing: no response from $base/write — is Zotero running?" >&2
+        exit 1
+    fi
+    if [[ "$code" != "401" ]]; then
+        echo "Refusing: unauthenticated POST /write returned $code, expected 401." >&2
+        echo "The live write surface is NOT enforcing a token. Set" >&2
+        echo "extensions.zotero.localWriteAPI.token in Zotero (Settings ->" >&2
+        echo "Advanced -> Config Editor) before exposing the tunnel. See docs/gpt-action.md." >&2
+        exit 1
+    fi
+    echo "Live write surface enforces a bearer token (unauthenticated POST /write -> 401)."
 
 # Create the named tunnel, route DNS, and write ~/.cloudflared/zotero-write.yml
 tunnel-setup: _require-write-token
@@ -470,7 +465,7 @@ tunnel-status:
 tunnel-logs:
     journalctl --user -u {{ tunnel_unit }} -f
 
-tunnel-restart:
+tunnel-restart: _require-write-token
     systemctl --user restart {{ tunnel_unit }}
 
 # Stop and disable the unit (the tunnel and DNS record survive)

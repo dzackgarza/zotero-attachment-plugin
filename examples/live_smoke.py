@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import secrets
 import sys
 import time
 import urllib.error
@@ -30,6 +31,8 @@ import urllib.parse
 import urllib.request
 from typing import Any
 from uuid import uuid4
+
+TOKEN_PREF = "extensions.zotero.localWriteAPI.token"
 
 
 PDF_BYTES = (
@@ -143,6 +146,54 @@ def _prove_bearer_auth(base_url: str, write_path: str, token: str) -> None:
     )
 
 
+def _run_javascript(
+    base_url: str, write_path: str, code: str, auth_headers: dict[str, str] | None = None
+) -> Any:
+    result = _request_json(
+        "POST",
+        f"{base_url}{write_path}",
+        payload={"operation": "run_javascript", "code": code},
+        auth_headers=auth_headers,
+    )
+    _require(
+        isinstance(result, dict) and result.get("success") is True,
+        f"run_javascript failed: {result!r}",
+    )
+    return result["details"]["result"]
+
+
+def _prove_bearer_gate(base_url: str, write_path: str, token: str) -> None:
+    """Always exercise the bearer gate, self-provisioning when no token is given.
+
+    With an externally-set token (--token), prove against it directly. Otherwise
+    set a random token through the open loopback run_javascript op, prove the
+    gate, then clear it so the caller's default loopback-open state is restored.
+    """
+    if token:
+        _prove_bearer_auth(base_url, write_path, token)
+        return
+    open_status, _ = _request_status("POST", f"{base_url}{write_path}", payload={})
+    _require(
+        open_status != 401,
+        "instance already requires a token but none was given; pass --token to prove the gate",
+    )
+    probe_token = secrets.token_hex(16)
+    # run_javascript serializes the code's return value, so each snippet must
+    # return something JSON-encodable (a bare Prefs.set/clear returns undefined).
+    _run_javascript(
+        base_url, write_path, f"Zotero.Prefs.set({TOKEN_PREF!r}, {probe_token!r}, true); return true;"
+    )
+    try:
+        _prove_bearer_auth(base_url, write_path, probe_token)
+    finally:
+        _run_javascript(
+            base_url,
+            write_path,
+            f"Zotero.Prefs.clear({TOKEN_PREF!r}, true); return true;",
+            auth_headers={"Authorization": f"Bearer {probe_token}"},
+        )
+
+
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise SmokeFailure(message)
@@ -245,11 +296,9 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         _require(capability in capabilities, f"Missing required capability {capability!r}: {capabilities!r}")
 
     _prove_openapi_endpoint(base_url, write_path)
-    if args.token:
-        # Exercises the bearer gate against a live instance whose token pref is
-        # set to this same value. Without --token the instance is in its
-        # loopback-only no-auth mode and the gate is not part of this run.
-        _prove_bearer_auth(base_url, write_path, args.token)
+    # Always prove the bearer gate: with --token against a pre-authed instance,
+    # otherwise self-provisioning a throwaway token and clearing it after.
+    _prove_bearer_gate(base_url, write_path, args.token)
 
     try:
         create_result = _post_write(
