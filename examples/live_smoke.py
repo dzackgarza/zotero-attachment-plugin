@@ -44,8 +44,14 @@ class SmokeFailure(RuntimeError):
     """Raised when the live smoke proof fails."""
 
 
-def _request_json(method: str, url: str, payload: dict[str, Any] | None = None, timeout: float = 30.0) -> Any:
-    headers = {"Accept": "application/json"}
+def _request_json(
+    method: str,
+    url: str,
+    payload: dict[str, Any] | None = None,
+    timeout: float = 30.0,
+    auth_headers: dict[str, str] | None = None,
+) -> Any:
+    headers = {"Accept": "application/json", **(auth_headers or {})}
     body = None
     if payload is not None:
         body = json.dumps(payload).encode("utf-8")
@@ -162,14 +168,22 @@ def _get_children(base_url: str, library_id: str, item_key: str) -> list[dict[st
     return children
 
 
+# Bearer header applied to every /write and /attach call, populated by run()
+# from --token. When the instance's token pref is set, the item-lifecycle calls
+# must authenticate too, not just the dedicated gate proof.
+_WRITE_AUTH: dict[str, str] = {}
+
+
 def _post_write(base_url: str, write_path: str, payload: dict[str, Any]) -> dict[str, Any]:
-    result = _request_json("POST", f"{base_url}{write_path}", payload=payload)
+    result = _request_json("POST", f"{base_url}{write_path}", payload=payload, auth_headers=_WRITE_AUTH)
     _require(isinstance(result, dict), f"Expected object response from {write_path}, got: {result!r}")
     return result
 
 
 def _post_attach(base_url: str, attach_path: str, payload: dict[str, Any]) -> dict[str, Any]:
-    result = _request_json("POST", f"{base_url}{attach_path}", payload=payload, timeout=60.0)
+    result = _request_json(
+        "POST", f"{base_url}{attach_path}", payload=payload, timeout=60.0, auth_headers=_WRITE_AUTH
+    )
     _require(isinstance(result, dict), f"Expected object response from {attach_path}, got: {result!r}")
     return result
 
@@ -196,6 +210,8 @@ def _cleanup_item(base_url: str, write_path: str, item_key: str | None) -> None:
 
 
 def run(args: argparse.Namespace) -> dict[str, Any]:
+    if args.token:
+        _WRITE_AUTH["Authorization"] = f"Bearer {args.token}"
     base_url = args.base_url.rstrip("/")
     library_id = str(args.library_id)
     suffix = uuid4().hex[:10]
