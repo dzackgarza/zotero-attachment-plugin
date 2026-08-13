@@ -409,33 +409,11 @@ tunnel_hostname := "zotero-write.dzackgarza.com"
 tunnel_config := home_directory() / ".cloudflared/zotero-write.yml"
 tunnel_unit := "zotero-write-tunnel.service"
 
-# Fail loudly unless the LIVE write surface actually enforces a bearer token.
-# The plugin leaves /write and /attach unauthenticated when the token pref is
-# unset (loopback-only default), so the tunnel MUST NOT come up in that state —
-# that would publish the write surface, run_javascript included, with no
-# credential. This probes the running plugin (an unauthenticated POST /write
-# must be rejected 401), not the delayed on-disk prefs.js snapshot, so it tracks
-# the same per-request value the plugin enforces.
+# Fail loudly unless the LIVE write surface enforces a bearer token. The check
+# lives in one tracked script so the systemd unit's ExecStartPre runs the same
+# probe on every (re)start; see dev/cloudflared/require-write-token.sh.
 _require-write-token:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    base="${ZOTERO_LOCAL_BASE_URL:-http://127.0.0.1:23119}"
-    # curl exits non-zero only on a transport failure (it returns 0 for any HTTP
-    # status, including 401); let that failure propagate loudly instead of
-    # masking it with a sentinel code.
-    if ! code=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$base/write" \
-        -H 'Content-Type: application/json' -d '{}'); then
-        echo "Refusing: could not reach $base/write — is Zotero running?" >&2
-        exit 1
-    fi
-    if [[ "$code" != "401" ]]; then
-        echo "Refusing: unauthenticated POST /write returned $code, expected 401." >&2
-        echo "The live write surface is NOT enforcing a token. Set" >&2
-        echo "extensions.zotero.localWriteAPI.token in Zotero (Settings ->" >&2
-        echo "Advanced -> Config Editor) before exposing the tunnel. See docs/gpt-action.md." >&2
-        exit 1
-    fi
-    echo "Live write surface enforces a bearer token (unauthenticated POST /write -> 401)."
+    bash dev/cloudflared/require-write-token.sh
 
 # Create the named tunnel, route DNS, and write ~/.cloudflared/zotero-write.yml
 tunnel-setup: _require-write-token
@@ -469,7 +447,11 @@ tunnel-setup: _require-write-token
 
 # Install and start the systemd user unit that keeps the tunnel up
 tunnel-install: _require-write-token
-    mkdir -p ~/.config/systemd/user
+    mkdir -p ~/.config/systemd/user ~/.cloudflared
+    # The unit's ExecStartPre runs this from a stable path, decoupled from the
+    # repo checkout, so every start (including at boot) re-verifies auth.
+    cp dev/cloudflared/require-write-token.sh ~/.cloudflared/require-write-token.sh
+    chmod +x ~/.cloudflared/require-write-token.sh
     cp systemd/{{ tunnel_unit }} ~/.config/systemd/user/
     systemctl --user daemon-reload
     systemctl --user enable --now {{ tunnel_unit }}

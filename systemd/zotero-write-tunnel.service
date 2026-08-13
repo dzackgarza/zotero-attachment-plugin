@@ -11,6 +11,12 @@
 # would demand a second credential that a Custom GPT Action cannot send
 # alongside the bearer token.
 #
+# ExecStartPre re-verifies on every start (including at boot) that the live
+# write surface rejects an unauthenticated request, so the tunnel never comes up
+# while /write is open. If the token is cleared while the unit is already
+# running, the surface stays exposed until the next restart — the plugin cannot
+# tell a loopback request from a tunnelled one (see docs/gpt-action.md).
+#
 # Modeled on cloudflared-zettlr.service.
 
 [Unit]
@@ -21,6 +27,7 @@ Wants=network-online.target
 
 [Service]
 Type=notify
+ExecStartPre=/usr/bin/env bash %h/.cloudflared/require-write-token.sh
 ExecStart=/bin/cloudflared --no-autoupdate --config %h/.cloudflared/zotero-write.yml tunnel run
 Restart=on-failure
 RestartSec=5s

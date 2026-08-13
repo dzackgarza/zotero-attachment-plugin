@@ -27,7 +27,9 @@ Two layers do the guarding:
   With the pref unset the plugin behaves exactly as before (loopback-only, no auth).
 
 The plugin cannot tell a loopback request from a tunnelled one — cloudflared forwards to `127.0.0.1:23119`, so both look identical to Zotero's server.
-So "unset pref = open" is safe only on loopback, and the guard that a public write surface is never left unauthenticated lives at the deployment boundary: **`just tunnel-setup` and `just tunnel-install` refuse to run unless the token pref is set** (they read it from the profile's `prefs.js`). The add-on also logs its auth state at startup (`Bearer auth ENABLED`/`DISABLED`).
+So "unset pref = open" is safe only on loopback, and the guard against exposing an unauthenticated write surface lives at the deployment boundary: `just tunnel-setup`, `tunnel-install`, and `tunnel-restart`, plus the unit's `ExecStartPre` on every start (including at boot), all run `dev/cloudflared/require-write-token.sh`, which probes the **live** plugin (an unauthenticated `POST /write` must return 401) and refuses otherwise. The add-on also logs its auth state at startup (`Bearer auth ENABLED`/`DISABLED`).
+
+Residual, stated plainly: this is checked at every *start*, not continuously. If you clear the token pref while the tunnel is already running, the write surface stays exposed until the next restart. The plugin can't detect exposure, so closing that window fully isn't possible in this design — don't clear the token while the tunnel is up.
 
 There is no Cloudflare Access policy in front, deliberately: Access needs two headers (`CF-Access-Client-Id`/`-Secret`) and a Custom GPT Action can send exactly one credential.
 
@@ -50,7 +52,7 @@ Prerequisites: `cloudflared` is logged in (`~/.cloudflared/cert.pem` exists), Zo
    - `extensions.zotero.localWriteAPI.publicBaseURL` → `https://zotero-write.dzackgarza.com`
 
    The second pref makes `/openapi.yaml` advertise the public server URL instead of `http://127.0.0.1:23119`, so the GPT builder imports a schema that already points at the tunnel.
-   Zotero writes `prefs.js` on a delay, so set the pref, then give it a moment before the next step (which reads it back).
+   The next step probes the live plugin, so the pref takes effect immediately once set — no need to wait for Zotero to flush it to disk.
 
 3. **Create the tunnel and DNS route, install the service:**
 
@@ -60,7 +62,7 @@ Prerequisites: `cloudflared` is logged in (`~/.cloudflared/cert.pem` exists), Zo
    just tunnel-install   # installs + enables the systemd user unit
    ```
 
-   Both recipes abort if the token pref is not set, so the tunnel cannot come up while the write surface is unauthenticated.
+   Both recipes (and the unit's `ExecStartPre` on every start) abort unless the live write surface rejects an unauthenticated request, so the tunnel cannot start while `/write` is open.
 
 4. **Verify from outside:**
 
