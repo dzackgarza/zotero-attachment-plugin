@@ -140,19 +140,25 @@ let WriteEndpoint: EndpointConstructor | undefined;
 let VersionEndpoint: EndpointConstructor | undefined;
 let OpenApiEndpoint: EndpointConstructor | undefined;
 
-let PLUGIN_VERSION = "3.2.0-dev";
-let FULLTEXT_ATTACH_PATH = "/attach";
-let LOCAL_WRITE_PATH = "/write";
-let VERSION_PATH = "/version";
-let OPENAPI_PATH = "/openapi.yaml";
-let FULLTEXT_ALLOWED_DIRS = ["/tmp", "/var/tmp"];
-let ADDON_ID = "local-write-api@dzackgarza.com";
-let HOMEPAGE_URL = "https://github.com/dzackgarza/zotero-local-write-api";
-let UPDATE_URL =
-  "https://raw.githubusercontent.com/dzackgarza/zotero-local-write-api/main/updates.json";
-let STRICT_MIN_VERSION = "7.0";
-let STRICT_MAX_VERSION = "*";
-let TESTED_ZOTERO_VERSION = "8.0.1";
+// Build-time constants, injected by build.py via esbuild --define from
+// config.yml and VERSION (the single sources). They are ambient free
+// identifiers with no `let` binding: esbuild's define only substitutes free
+// identifiers, so a `let X = "default"` declaration silently defeated every
+// define and shipped the source defaults (e.g. /version reported "3.2.0-dev"
+// forever). All references are inside functions, never at module scope, so the
+// unbuilt module still type-checks and loads.
+declare const PLUGIN_VERSION: string;
+declare const FULLTEXT_ATTACH_PATH: string;
+declare const LOCAL_WRITE_PATH: string;
+declare const VERSION_PATH: string;
+declare const OPENAPI_PATH: string;
+declare const FULLTEXT_ALLOWED_DIRS: string[];
+declare const ADDON_ID: string;
+declare const HOMEPAGE_URL: string;
+declare const UPDATE_URL: string;
+declare const STRICT_MIN_VERSION: string;
+declare const STRICT_MAX_VERSION: string;
+declare const TESTED_ZOTERO_VERSION: string;
 let PLUGIN_CAPABILITIES = [
   "attach",
   "attach_bytes",
