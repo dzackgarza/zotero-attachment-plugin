@@ -173,6 +173,13 @@ let BIBTEX_TRANSLATOR_ID = "9cb70025-a888-4a29-a210-93ec52da40d4";
 // pref is REQUIRED before exposing these endpoints through a tunnel (see
 // docs/gpt-action.md): a Custom GPT Action then sends the token as
 // "Authorization: Bearer <token>", the one credential the GPT builder supports.
+//
+// The plugin cannot tell a loopback request from a tunnelled one (cloudflared
+// forwards to 127.0.0.1:23119, so both look identical to Zotero's server), so
+// "unset pref = open" is deliberately confined to local use. The guard against
+// an unauthenticated public write surface lives at the deployment boundary: the
+// `just tunnel-setup`/`tunnel-install` recipes refuse to bring the tunnel up
+// unless this pref is set (justfile `_require-write-token`).
 let TOKEN_PREF = "extensions.zotero.localWriteAPI.token";
 // When set, /openapi.yaml advertises this server URL instead of the loopback
 // one, so the GPT builder can import the schema straight from the tunnel.
@@ -1552,6 +1559,17 @@ async function startup({
   void version;
   pluginRootURI = rootURI;
   log("Starting " + PLUGIN_VERSION);
+
+  // Make the auth state visible in the log, so an operator can confirm the
+  // write surface is gated before exposing it (or see that it is open).
+  let tokenPref = Zotero.Prefs.get(TOKEN_PREF, true);
+  let authEnabled = typeof tokenPref === "string" && tokenPref !== "";
+  log(
+    authEnabled
+      ? "Bearer auth ENABLED for /write and /attach (token pref set)"
+      : "Bearer auth DISABLED: /write and /attach are unauthenticated " +
+          "(loopback-only default). Do not expose beyond loopback in this state.",
+  );
 
   AttachEndpoint = function () {};
   AttachEndpoint.prototype = {

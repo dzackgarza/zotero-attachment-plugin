@@ -13,8 +13,9 @@ dependencies = [
 # tests to run against a live Zotero instance.
 [tool.uv]
 package = false
-# Dependency cooldown: wait out newly published releases before resolving them.
-exclude-newer = "7 days"
+# Dependency cooldown: ignore packages published after this date so a freshly
+# compromised or broken release cannot enter a resolve. Bump periodically.
+exclude-newer = "2026-08-06T00:00:00Z"
 
 [tool.pytest.ini_options]
 testpaths = ["tests/schemathesis"]

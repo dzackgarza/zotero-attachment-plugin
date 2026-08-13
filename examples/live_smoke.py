@@ -68,6 +68,75 @@ def _request_json(method: str, url: str, payload: dict[str, Any] | None = None, 
         raise SmokeFailure(f"{method} {url} did not return JSON: {raw}") from exc
 
 
+def _request_status(
+    method: str,
+    url: str,
+    *,
+    headers: dict[str, str] | None = None,
+    payload: dict[str, Any] | None = None,
+    timeout: float = 30.0,
+) -> tuple[int, str]:
+    """Return (status_code, body_text). Does not raise on 4xx/5xx."""
+    request_headers = dict(headers or {})
+    body = None
+    if payload is not None:
+        body = json.dumps(payload).encode("utf-8")
+        request_headers["Content-Type"] = "application/json"
+    request = urllib.request.Request(url, data=body, headers=request_headers, method=method)
+    try:
+        with urllib.request.urlopen(request, timeout=timeout) as response:
+            return response.status, response.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as exc:
+        return exc.code, exc.read().decode("utf-8", errors="replace")
+    except urllib.error.URLError as exc:
+        raise SmokeFailure(f"{method} {url} failed: {exc.reason}") from exc
+
+
+def _prove_openapi_endpoint(base_url: str, write_path: str) -> None:
+    """GET /openapi.yaml serves the bundled schema as a public document."""
+    status, body = _request_status("GET", f"{base_url}/openapi.yaml")
+    _require(status == 200, f"/openapi.yaml returned HTTP {status}, expected 200: {body[:200]!r}")
+    _require(body.startswith("openapi:"), f"/openapi.yaml body is not an OpenAPI doc: {body[:80]!r}")
+    _require(
+        f"{write_path}:" in body,
+        f"/openapi.yaml does not describe the {write_path} path: {body[:200]!r}",
+    )
+
+
+def _prove_bearer_auth(base_url: str, write_path: str, token: str) -> None:
+    """With the token pref set, /write demands a matching bearer token.
+
+    Auth is checked before the request body, so an empty body isolates the gate:
+    no token -> 401; correct token -> the body-validation 400, never 401. This
+    proves the gate without creating or trashing any library item.
+    """
+    no_token_status, no_token_body = _request_status("POST", f"{base_url}{write_path}", payload={})
+    _require(
+        no_token_status == 401,
+        f"/write without a token returned HTTP {no_token_status}, expected 401: {no_token_body[:200]!r}",
+    )
+    good_status, good_body = _request_status(
+        "POST",
+        f"{base_url}{write_path}",
+        headers={"Authorization": f"Bearer {token}"},
+        payload={},
+    )
+    _require(
+        good_status == 400,
+        f"/write with the token returned HTTP {good_status}, expected 400 (body validation): {good_body[:200]!r}",
+    )
+    wrong_status, wrong_body = _request_status(
+        "POST",
+        f"{base_url}{write_path}",
+        headers={"Authorization": "Bearer not-the-token"},
+        payload={},
+    )
+    _require(
+        wrong_status == 401,
+        f"/write with a wrong token returned HTTP {wrong_status}, expected 401: {wrong_body[:200]!r}",
+    )
+
+
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise SmokeFailure(message)
@@ -158,6 +227,13 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
     _require(isinstance(capabilities, list), f"Version probe capabilities is not a list: {version_payload!r}")
     for capability in ("attach", "attach_bytes", "write", "version_probe", "import_bibtex"):
         _require(capability in capabilities, f"Missing required capability {capability!r}: {capabilities!r}")
+
+    _prove_openapi_endpoint(base_url, write_path)
+    if args.token:
+        # Exercises the bearer gate against a live instance whose token pref is
+        # set to this same value. Without --token the instance is in its
+        # loopback-only no-auth mode and the gate is not part of this run.
+        _prove_bearer_auth(base_url, write_path, args.token)
 
     try:
         create_result = _post_write(
@@ -288,6 +364,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--base-url", default="http://127.0.0.1:23119", help="Base URL for the local Zotero server")
     parser.add_argument("--library-id", default="0", help="Local Zotero library id for read-back checks")
     parser.add_argument("--expected-version", default="", help="Fail unless /version reports this exact add-on version")
+    parser.add_argument(
+        "--token",
+        default="",
+        help="Bearer token matching the running instance's localWriteAPI.token pref; "
+        "when set, proves /write returns 401 without it and 400 with it",
+    )
     return parser.parse_args()
 
 

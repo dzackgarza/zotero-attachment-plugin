@@ -51,7 +51,10 @@ smoke-live:
     if [[ -n "${ZOTERO_LIBRARY_ID:-}" ]]; then
         args+=(--library-id "${ZOTERO_LIBRARY_ID}")
     fi
-    python3 examples/live_smoke.py "${args[@]}"
+    if [[ -n "${ZOTERO_WRITE_API_TOKEN:-}" ]]; then
+        args+=(--token "${ZOTERO_WRITE_API_TOKEN}")
+    fi
+    uv run examples/live_smoke.py "${args[@]}"
 
 # Build the working-tree XPI and hot-install it into a Zotero profile, then
 # restart Zotero with a cache purge so the current code is actually loaded, and
@@ -396,8 +399,39 @@ tunnel_hostname := "zotero-write.dzackgarza.com"
 tunnel_config := home_directory() / ".cloudflared/zotero-write.yml"
 tunnel_unit := "zotero-write-tunnel.service"
 
+# Fail loudly unless the write-API token pref is set in the target Zotero
+# profile. The plugin leaves /write and /attach unauthenticated when the pref
+# is unset (loopback-only default), so the tunnel MUST NOT come up in that
+# state — that would publish the write surface, run_javascript included, with
+# no credential. This is the deployment-boundary guard for that coupling.
+_require-write-token:
+    #!/usr/bin/env python3
+    import os, pathlib, re, subprocess, sys
+
+    profile_dir = os.environ.get("ZOTERO_PROFILE_DIR") or subprocess.run(
+        ["just", "_default-profile-dir"], capture_output=True, text=True, check=True
+    ).stdout.strip()
+    prefs = pathlib.Path(profile_dir) / "prefs.js"
+    if not prefs.is_file():
+        sys.exit(f"no prefs.js at {prefs}; start Zotero once so it writes prefs")
+    # prefs.js lines look like: user_pref("extensions.zotero.localWriteAPI.token", "abc");
+    pattern = re.compile(
+        r'user_pref\(\s*"extensions\.zotero\.localWriteAPI\.token"\s*,\s*"([^"]*)"\s*\)'
+    )
+    match = pattern.search(prefs.read_text())
+    if match is None or match.group(1) == "":
+        sys.exit(
+            "write-API token pref is unset in "
+            f"{prefs}.\n"
+            "Set extensions.zotero.localWriteAPI.token in Zotero's Config Editor "
+            "(Settings -> Advanced -> Config Editor) before exposing the tunnel.\n"
+            "Zotero writes prefs.js on a delay, so set the pref, then retry.\n"
+            "See docs/gpt-action.md."
+        )
+    print(f"write-API token pref is set in {prefs}")
+
 # Create the named tunnel, route DNS, and write ~/.cloudflared/zotero-write.yml
-tunnel-setup:
+tunnel-setup: _require-write-token
     #!/usr/bin/env bash
     set -euo pipefail
     if ! cloudflared tunnel list --output json | jq -e --arg n "{{ tunnel_name }}" \
@@ -412,7 +446,7 @@ tunnel-setup:
     echo "Wrote {{ tunnel_config }} (tunnel ${uuid})"
 
 # Install and start the systemd user unit that keeps the tunnel up
-tunnel-install:
+tunnel-install: _require-write-token
     mkdir -p ~/.config/systemd/user
     cp systemd/{{ tunnel_unit }} ~/.config/systemd/user/
     systemctl --user daemon-reload
