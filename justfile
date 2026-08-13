@@ -33,9 +33,11 @@ typecheck:
 lint:
     bun run lint
 
-# Compile TypeScript and build the XPI (does not bump version or release)
+# Compile TypeScript and build the XPI (does not bump version or release).
+# The update manifest goes to a scratch path so a dev build never rewrites the
+# tracked updates.json, whose hash must match the XPI on the GitHub release.
 build:
-    uv run build.py
+    uv run build.py --updates-out "$(mktemp -d)/updates.json"
 
 # Live runtime proof against a real Zotero with the current XPI installed
 smoke-live:
@@ -78,8 +80,9 @@ install-live:
     version="$(cat VERSION)"
     xpi="local-write-api-${version}.xpi"
 
-    # 1. Build from the working tree.
-    uv run build.py
+    # 1. Build from the working tree. The update manifest goes to a scratch path
+    #    so this install never rewrites the tracked updates.json.
+    uv run build.py --updates-out "$(mktemp -d)/updates.json"
     if [[ ! -f "$xpi" ]]; then
         echo "expected $xpi was not built" >&2
         exit 1
