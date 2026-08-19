@@ -445,11 +445,122 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
             "remove_item_from_collection left the collection attached",
         )
 
-        _post_write(
-            base_url,
-            write_path,
-            {"operation": "trash_collection", "collection_key": collection_key},
+        # Tag operations, all scoped to this run's own tags.
+        tag_a = f"live-smoke-a-{suffix}"
+        tag_b = f"live-smoke-b-{suffix}"
+        tag_c = f"live-smoke-c-{suffix}"
+
+        _require(
+            _post_write(base_url, write_path, {"operation": "add_item_tags", "item_key": item_key, "tags": [tag_a]}).get("success") is True,
+            "add_item_tags failed",
         )
+        _require(tag_a in _tag_names(_get_item(base_url, library_id, item_key)), "add_item_tags did not add the tag")
+
+        _require(
+            _post_write(base_url, write_path, {"operation": "set_item_tags", "item_key": item_key, "tags": [keep_tag, tag_a, tag_b]}).get("success") is True,
+            "set_item_tags failed",
+        )
+        _require(set(_tag_names(_get_item(base_url, library_id, item_key))) == {keep_tag, tag_a, tag_b}, "set_item_tags did not replace the tag set")
+
+        _require(
+            _post_write(base_url, write_path, {"operation": "remove_item_tags", "item_key": item_key, "tags": [tag_b]}).get("success") is True,
+            "remove_item_tags failed",
+        )
+        _require(tag_b not in _tag_names(_get_item(base_url, library_id, item_key)), "remove_item_tags left the tag attached")
+
+        _require(
+            _post_write(base_url, write_path, {"operation": "rename_tag", "old_name": tag_a, "new_name": tag_c}).get("success") is True,
+            "rename_tag failed",
+        )
+        _require(tag_c in _tag_names(_get_item(base_url, library_id, item_key)), "rename_tag did not apply the new name")
+
+        _require(
+            _post_write(base_url, write_path, {"operation": "merge_tags", "source_tags": [tag_c], "target_tag": keep_tag}).get("success") is True,
+            "merge_tags failed",
+        )
+        merged_tags = _tag_names(_get_item(base_url, library_id, item_key))
+        _require(tag_c not in merged_tags and keep_tag in merged_tags, "merge_tags did not fold the source into the target")
+
+        # Item field and child-item operations.
+        new_title = f"Live Smoke Retitled {suffix}"
+        _require(
+            _post_write(base_url, write_path, {"operation": "update_item_fields", "item_key": item_key, "fields": {"title": new_title}}).get("success") is True,
+            "update_item_fields failed",
+        )
+        _require(_get_item(base_url, library_id, item_key)["data"]["title"] == new_title, "update_item_fields did not persist the title")
+
+        _require(
+            _post_write(base_url, write_path, {"operation": "update_attachment_title", "attachment_key": attachment_key, "new_title": "Live Smoke PDF Retitled"}).get("success") is True,
+            "update_attachment_title failed",
+        )
+
+        note_result = _post_write(base_url, write_path, {"operation": "attach_note", "parent_item_key": item_key, "note_text": "live smoke note"})
+        _require(note_result.get("success") is True, f"attach_note failed: {note_result!r}")
+        note_key = note_result["note_key"]
+        _require(
+            _post_write(base_url, write_path, {"operation": "update_note", "note_key": note_key, "new_content": "live smoke note updated"}).get("success") is True,
+            "update_note failed",
+        )
+
+        url_result = _post_write(base_url, write_path, {"operation": "attach_url", "parent_item_key": item_key, "url": "https://example.com/live-smoke"})
+        _require(url_result.get("success") is True, f"attach_url failed: {url_result!r}")
+
+        # Copy, then use the copy as the disposable side of merge/trash/restore.
+        copy_result = _post_write(base_url, write_path, {"operation": "copy_item", "item_key": item_key})
+        _require(copy_result.get("success") is True, f"copy_item failed: {copy_result!r}")
+        copy_key = copy_result["new_item_key"]
+
+        _require(
+            _post_write(base_url, write_path, {"operation": "trash_item", "item_key": copy_key}).get("success") is True,
+            "trash_item on the copy failed",
+        )
+        _require(
+            _post_write(base_url, write_path, {"operation": "restore_item", "item_key": copy_key}).get("success") is True,
+            "restore_item failed",
+        )
+        _require(_get_item(base_url, library_id, copy_key)["data"].get("deleted") is not True, "restore_item left the item trashed")
+
+        _require(
+            _post_write(base_url, write_path, {"operation": "replace_item_json", "item_key": copy_key, "item_json": {"itemType": "journalArticle", "title": f"Live Smoke Replaced {suffix}"}}).get("success") is True,
+            "replace_item_json failed",
+        )
+        _require(
+            _get_item(base_url, library_id, copy_key)["data"]["title"] == f"Live Smoke Replaced {suffix}",
+            "replace_item_json did not persist the replacement",
+        )
+
+        _require(
+            _post_write(base_url, write_path, {"operation": "merge_items", "source_key": copy_key, "target_key": item_key}).get("success") is True,
+            "merge_items failed",
+        )
+
+        # Collection hierarchy operations, all on this run's own collections.
+        parent_result = _post_write(base_url, write_path, {"operation": "create_collection", "name": f"live-smoke-parent-{suffix}"})
+        _require(parent_result.get("success") is True, f"create_collection (parent) failed: {parent_result!r}")
+        parent_key = parent_result["details"]["collection_key"]
+
+        _require(
+            _post_write(base_url, write_path, {"operation": "rename_collection", "collection_key": collection_key, "new_name": f"live-smoke-renamed-{suffix}"}).get("success") is True,
+            "rename_collection failed",
+        )
+        _require(
+            _post_write(base_url, write_path, {"operation": "move_collection", "collection_key": collection_key, "new_parent_key": parent_key}).get("success") is True,
+            "move_collection failed",
+        )
+        _require(
+            _post_write(base_url, write_path, {"operation": "set_item_collections", "item_key": item_key, "collection_keys": [parent_key]}).get("success") is True,
+            "set_item_collections failed",
+        )
+        _require(
+            _get_item(base_url, library_id, item_key)["data"]["collections"] == [parent_key],
+            "set_item_collections did not replace the collection set",
+        )
+        _require(
+            _post_write(base_url, write_path, {"operation": "merge_collections", "source_keys": [collection_key], "target_key": parent_key}).get("success") is True,
+            "merge_collections failed",
+        )
+
+        _post_write(base_url, write_path, {"operation": "trash_collection", "collection_key": parent_key})
 
         trash_result = _post_write(
             base_url,
