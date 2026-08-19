@@ -5,7 +5,6 @@
   "scripts": {
     "build": "esbuild src/bootstrap.ts --outfile=src/bootstrap.js --target=firefox115",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src/bootstrap.ts",
     "test": "bun test --coverage --coverage-reporter=lcov --coverage-dir=.",
     "openapi:lint": "redocly lint openapi.yaml",
     "openapi:generate": "openapi-typescript openapi.yaml -o src/generated/openapi.ts",
@@ -17,9 +16,7 @@
     "@redocly/cli": "^2.39.0",
     "@types/bun": "latest",
     "@types/js-yaml": "^4.0.9",
-    "@zotero-plugin/eslint-config": "^0.6.8",
     "esbuild": "^0.27.3",
-    "eslint": "^10.0.3",
     "js-yaml": "^5.2.1",
     "openapi-fetch": "^0.17.0",
     "openapi-typescript": "^7.13.0",
