@@ -58,7 +58,7 @@ jobs:
       - name: Validate revised schema
         uses: oasdiff/oasdiff-action/validate@v0
         with:
-          file: openapi.yaml
+          spec: openapi.yaml
           fail-on: WARN
 
       - name: Breaking-change check vs base
