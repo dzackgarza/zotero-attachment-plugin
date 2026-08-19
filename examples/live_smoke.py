@@ -397,6 +397,60 @@ def run(args: argparse.Namespace) -> dict[str, Any]:
         _require(doomed_tag not in updated_tags, f"delete_tag left doomed tag behind: {updated_tags!r}")
         _require(keep_tag in updated_tags, f"delete_tag removed the keep tag: {updated_tags!r}")
 
+        # Collection round-trip. Both handlers map an item's collection IDs back to
+        # keys through Zotero.Collections.get, whose documented `false` sentinel was
+        # dereferenced directly; nothing exercised that path at the real boundary.
+        collection_name = f"live-smoke-collection-{suffix}"
+        create_collection_result = _post_write(
+            base_url,
+            write_path,
+            {"operation": "create_collection", "name": collection_name},
+        )
+        _require(
+            create_collection_result.get("success") is True,
+            f"create_collection failed: {create_collection_result!r}",
+        )
+        collection_key = create_collection_result["details"]["collection_key"]
+
+        add_result = _post_write(
+            base_url,
+            write_path,
+            {
+                "operation": "add_item_to_collection",
+                "item_key": item_key,
+                "collection_key": collection_key,
+            },
+        )
+        _require(add_result.get("success") is True, f"add_item_to_collection failed: {add_result!r}")
+        _require(
+            collection_key in _get_item(base_url, library_id, item_key)["data"]["collections"],
+            "add_item_to_collection did not attach the collection",
+        )
+
+        remove_result = _post_write(
+            base_url,
+            write_path,
+            {
+                "operation": "remove_item_from_collection",
+                "item_key": item_key,
+                "collection_key": collection_key,
+            },
+        )
+        _require(
+            remove_result.get("success") is True,
+            f"remove_item_from_collection failed: {remove_result!r}",
+        )
+        _require(
+            collection_key not in _get_item(base_url, library_id, item_key)["data"]["collections"],
+            "remove_item_from_collection left the collection attached",
+        )
+
+        _post_write(
+            base_url,
+            write_path,
+            {"operation": "trash_collection", "collection_key": collection_key},
+        )
+
         trash_result = _post_write(
             base_url,
             write_path,
