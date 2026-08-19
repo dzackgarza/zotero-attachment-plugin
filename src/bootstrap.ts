@@ -383,6 +383,17 @@ async function getUserCollectionOrThrow(collectionKey: string) {
   return collection;
 }
 
+function collectionKeyForID(collectionID: number): string {
+  // Zotero.Collections.get returns the documented `false` sentinel for an id that no
+  // longer resolves. Dropping such an id silently would rewrite the item's collection
+  // memberships during an unrelated add/remove, so an unresolvable id fails loudly.
+  let collection = Zotero.Collections.get(collectionID);
+  if (collection === false) {
+    throw notFound("Collection not found for id: " + String(collectionID));
+  }
+  return collection.key;
+}
+
 function collectionDetails(collection: Zotero.Collection): JsonPayload {
   // parentKey is the documented `false` sentinel when the collection has no parent;
   // zotero-types models only the `string` case, so read through the real runtime type.
@@ -1149,7 +1160,7 @@ async function handleAddItemToCollection(data: RequestData) {
   let collection = await getUserCollectionOrThrow(collectionKey);
   let currentKeys = item
     .getCollections()
-    .map((id) => Zotero.Collections.get(id).key);
+    .map(collectionKeyForID);
   if (!currentKeys.includes(collectionKey)) {
     item.setCollections([...currentKeys, collectionKey]);
     await item.saveTx();
@@ -1171,7 +1182,7 @@ async function handleRemoveItemFromCollection(data: RequestData) {
   let collection = await getUserCollectionOrThrow(collectionKey);
   let currentKeys = item
     .getCollections()
-    .map((id) => Zotero.Collections.get(id).key)
+    .map(collectionKeyForID)
     .filter((k) => k !== collectionKey);
   item.setCollections(currentKeys);
   await item.saveTx();
