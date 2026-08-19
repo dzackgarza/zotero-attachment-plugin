@@ -170,6 +170,7 @@ let PLUGIN_CAPABILITIES = [
   "selected_collection",
   "sync",
   "run_javascript",
+  "openapi_spec",
 ];
 
 let BIBTEX_TRANSLATOR_ID = "9cb70025-a888-4a29-a210-93ec52da40d4";
@@ -329,6 +330,7 @@ function pluginVersionPayload(): JsonPayload {
       attach: FULLTEXT_ATTACH_PATH,
       write: LOCAL_WRITE_PATH,
       version: VERSION_PATH,
+      openapi: OPENAPI_PATH,
     },
     compatibility: {
       strict_min_version: STRICT_MIN_VERSION,
