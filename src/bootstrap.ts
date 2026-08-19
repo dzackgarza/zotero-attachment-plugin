@@ -924,16 +924,11 @@ async function handleDeleteTag(data: RequestData) {
   search.addCondition("tag", "is", tagName);
   let itemIDs = await search.search();
 
-  let modifiedCount = 0;
-  if (itemIDs.length > 0) {
-    let items = await Zotero.Items.getAsync(itemIDs);
-    for (let item of items) {
-      if (item.removeTag(tagName)) {
-        await item.saveTx();
-        modifiedCount++;
-      }
-    }
-  }
+  // Zotero.Tags.removeFromLibrary already detaches the tag from every item that
+  // carries it. Doing that here first left it with an empty item set, and its
+  // UPDATE then built "WHERE itemID IN ()" and failed with "Parameter 1 is
+  // undefined". The search above is kept only to report how many items changed.
+  let modifiedCount = itemIDs.length;
 
   await removeTagsFromUserLibrary(userLibraryID(), [tagID]);
 
@@ -1568,10 +1563,18 @@ async function handleWriteRequest(data: unknown): Promise<EndpointResult> {
 let pluginRootURI = "";
 
 async function openApiSpecText(): Promise<string> {
-  // Bundled into the XPI by build.py next to bootstrap.js.
-  let text = await Zotero.File.getContentsFromURLAsync(
-    pluginRootURI + "openapi.yaml",
-  );
+  // Bundled into the XPI by build.py next to bootstrap.js. rootURI is a
+  // jar:file://…!/ URI for a packaged install, and Zotero.File.getContentsFromURLAsync
+  // cannot read those: it routes through Zotero.HTTP._parseURI, which reads
+  // nsIURI.username and throws NS_ERROR_FAILURE on a jar: URI. fetch() reads it
+  // directly in the add-on's privileged scope.
+  let response = await fetch(pluginRootURI + "openapi.yaml");
+  if (!response.ok) {
+    throw new Error(
+      "bundled openapi.yaml could not be read: HTTP " + String(response.status),
+    );
+  }
+  let text = await response.text();
   let publicBaseUrl = Zotero.Prefs.get(PUBLIC_BASE_URL_PREF, true);
   if (typeof publicBaseUrl === "string" && publicBaseUrl !== "") {
     // The spec's single server entry is the loopback URL; a set pref rewrites
