@@ -210,10 +210,26 @@ function bearerAuthFailure(request: EndpointRequest): EndpointResult | null {
     }
     return null;
   }
-  if (request.headers.authorization === "Bearer " + token) {
+  if (secretEquals(request.headers.authorization, "Bearer " + token)) {
     return null;
   }
   return bearerDenied(request, "Missing or invalid bearer token");
+}
+
+// A plain === short-circuits on the first mismatching byte, so response timing leaks
+// how much of the token a caller has guessed. When publicBaseURL is set this surface is
+// reachable from the internet, so the compare runs over the full length regardless of
+// where the first difference falls. Length is still distinguishable, which is the
+// standard trade-off for this construction.
+function secretEquals(candidate: string | undefined, expected: string): boolean {
+  if (candidate === undefined || candidate.length !== expected.length) {
+    return false;
+  }
+  let difference = 0;
+  for (let index = 0; index < expected.length; index += 1) {
+    difference |= candidate.charCodeAt(index) ^ expected.charCodeAt(index);
+  }
+  return difference === 0;
 }
 
 function bearerDenied(
@@ -1596,12 +1612,18 @@ async function openApiSpecText(): Promise<string> {
     // if that exact server line is absent rather than silently serving a spec
     // that still points at loopback — the whole point of the pref is to not do
     // that.
+    // A presence check plus a first-match replace cannot tell the servers entry from
+    // any other line that happens to contain the same URL — it would rewrite the wrong
+    // one and serve a spec still pointing at loopback while claiming to be published.
+    // Requiring exactly one occurrence makes that ambiguity impossible to reach.
     let loopbackServer = "url: http://127.0.0.1:23119";
-    if (!text.includes(loopbackServer)) {
+    let occurrences = text.split(loopbackServer).length - 1;
+    if (occurrences !== 1) {
       throw new Error(
-        "openapi.yaml has no '" +
+        "openapi.yaml must contain exactly one '" +
           loopbackServer +
-          "' server entry to rewrite for publicBaseURL",
+          "' entry to rewrite for publicBaseURL, found " +
+          String(occurrences),
       );
     }
     return text.replace(
