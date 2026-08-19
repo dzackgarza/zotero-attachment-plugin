@@ -192,20 +192,31 @@ let TOKEN_PREF = "extensions.zotero.localWriteAPI.token";
 let PUBLIC_BASE_URL_PREF = "extensions.zotero.localWriteAPI.publicBaseURL";
 
 function bearerAuthFailure(request: EndpointRequest): EndpointResult | null {
+  // An unset or empty token pref denies the write surface rather than disabling the
+  // gate. Treating "no token configured" as "no auth required" fails open: the pref is
+  // editable at runtime with no service restart, so clearing it would publish
+  // unauthenticated /write and /attach for as long as the tunnel stays up.
   let token = Zotero.Prefs.get(TOKEN_PREF, true);
   if (typeof token !== "string" || token === "") {
-    return null;
+    return bearerDenied(request, "Write API token is not configured");
   }
   if (request.headers.authorization === "Bearer " + token) {
     return null;
   }
+  return bearerDenied(request, "Missing or invalid bearer token");
+}
+
+function bearerDenied(
+  request: EndpointRequest,
+  reason: string,
+): EndpointResult {
   return [
     401,
     "application/json",
     JSON.stringify(
       // details.request echoes the body per the ErrorResponse schema; the 401
       // is documented on /write and /attach in openapi.yaml.
-      errorResult("authorize", "auth", "Missing or invalid bearer token", {
+      errorResult("authorize", "auth", reason, {
         request: request.data,
       }),
     ),
