@@ -192,13 +192,22 @@ let TOKEN_PREF = "extensions.zotero.localWriteAPI.token";
 let PUBLIC_BASE_URL_PREF = "extensions.zotero.localWriteAPI.publicBaseURL";
 
 function bearerAuthFailure(request: EndpointRequest): EndpointResult | null {
-  // An unset or empty token pref denies the write surface rather than disabling the
-  // gate. Treating "no token configured" as "no auth required" fails open: the pref is
-  // editable at runtime with no service restart, so clearing it would publish
-  // unauthenticated /write and /attach for as long as the tunnel stays up.
+  // Loopback with no token is the documented default and stays open. What must never
+  // happen is an unauthenticated surface being *published*: publicBaseURL is what makes
+  // the plugin reachable beyond loopback, and both prefs are editable at runtime with no
+  // restart, so the two are checked together on every request rather than once at
+  // tunnel bring-up.
   let token = Zotero.Prefs.get(TOKEN_PREF, true);
-  if (typeof token !== "string" || token === "") {
-    return bearerDenied(request, "Write API token is not configured");
+  let published = Zotero.Prefs.get(PUBLIC_BASE_URL_PREF, true);
+  let hasToken = typeof token === "string" && token !== "";
+  if (!hasToken) {
+    if (typeof published === "string" && published !== "") {
+      return bearerDenied(
+        request,
+        "Write API is published via publicBaseURL but no token is configured",
+      );
+    }
+    return null;
   }
   if (request.headers.authorization === "Bearer " + token) {
     return null;
