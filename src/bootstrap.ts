@@ -181,11 +181,12 @@ let BIBTEX_TRANSLATOR_ID = "9cb70025-a888-4a29-a210-93ec52da40d4";
 // "Authorization: Bearer <token>", the one credential the GPT builder supports.
 //
 // The plugin cannot tell a loopback request from a tunnelled one (cloudflared
-// forwards to 127.0.0.1:23119, so both look identical to Zotero's server), so
-// "unset pref = open" is deliberately confined to local use. The guard against
-// an unauthenticated public write surface lives at the deployment boundary: the
-// `just tunnel-setup`/`tunnel-install` recipes refuse to bring the tunnel up
-// unless this pref is set (justfile `_require-write-token`).
+// forwards to 127.0.0.1:23119, so both look identical to Zotero's server), but it does
+// know whether it has been published: publicBaseURL is set precisely when the surface is
+// reachable off-loopback. bearerAuthFailure reads both prefs per request and refuses when
+// the surface is published without a token, so clearing the token mid-run is caught
+// immediately. The `just tunnel-setup`/`tunnel-install` recipes and the unit's
+// ExecStartPre (justfile `_require-write-token`) still refuse at bring-up.
 let TOKEN_PREF = "extensions.zotero.localWriteAPI.token";
 // When set, /openapi.yaml advertises this server URL instead of the loopback
 // one, so the GPT builder can import the schema straight from the tunnel.
@@ -459,10 +460,23 @@ function resolveAttachFilePath(filePath: string): string {
   return file.path;
 }
 
-function isMissingFileError(error: unknown): boolean {
+// XPCOM file errors all sit in the NS_ERROR_MODULE_FILES block, so matching the module
+// covers every way a path can fail to resolve rather than the single name that was
+// previously substring-matched out of the message text. Values read from this runtime
+// via Cr: NOT_FOUND 0x80520012, UNRECOGNIZED_PATH 0x80520001, INVALID_PATH 0x80520009,
+// NOT_DIRECTORY 0x8052000c, NAME_TOO_LONG 0x80520011, ACCESS_DENIED 0x80520015 — only
+// the first of which used to engage the caller-supplied-bytes path.
+let NS_ERROR_MODULE_FILES_FIRST = 0x80520000;
+let NS_ERROR_MODULE_FILES_LAST = 0x8052ffff;
+
+function isUnusableFilePathError(error: unknown): boolean {
+  let result = (error as { result?: unknown }).result;
+  if (typeof result !== "number") {
+    return false;
+  }
+  let code = result >>> 0;
   return (
-    typeof (error as Error).message === "string" &&
-    (error as Error).message.includes("NS_ERROR_FILE_NOT_FOUND")
+    code >= NS_ERROR_MODULE_FILES_FIRST && code <= NS_ERROR_MODULE_FILES_LAST
   );
 }
 
@@ -557,7 +571,7 @@ async function handleFulltextAttach(data: RequestData) {
       try {
         attachment = await importStoredAttachment(parentItem, filePath, title);
       } catch (error) {
-        if (fileBytesBase64 === null || !isMissingFileError(error)) {
+        if (fileBytesBase64 === null || !isUnusableFilePathError(error)) {
           throw error;
         }
         let fallbackName =
