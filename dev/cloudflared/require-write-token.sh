@@ -7,10 +7,10 @@
 # including at boot. It probes the running plugin — the same per-request value
 # the plugin enforces — rather than the delayed prefs.js snapshot.
 #
-# Residual it does NOT cover: if the token pref is cleared while the unit is
-# already running, the surface stays exposed until the next restart. The plugin
-# cannot distinguish a loopback request from a tunnelled one, so this is the
-# accepted limit of the chosen design (see docs/gpt-action.md).
+# This is the start-time half of the guard. The plugin covers the rest: it
+# refuses /write and /attach per request whenever publicBaseURL is set without a
+# token, so clearing the pref while the unit runs is denied immediately rather
+# than exposed until the next restart (see docs/gpt-action.md).
 set -euo pipefail
 
 base="${ZOTERO_LOCAL_BASE_URL:-http://127.0.0.1:23119}"

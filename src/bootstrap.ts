@@ -1618,11 +1618,16 @@ async function startup({
   // Make the auth state visible in the log, so an operator can confirm the
   // write surface is gated before exposing it (or see that it is open).
   let tokenPref = Zotero.Prefs.get(TOKEN_PREF, true);
+  let publicPref = Zotero.Prefs.get(PUBLIC_BASE_URL_PREF, true);
   let authEnabled = typeof tokenPref === "string" && tokenPref !== "";
+  let published = typeof publicPref === "string" && publicPref !== "";
   log(
     authEnabled
       ? "Bearer auth ENABLED for /write and /attach (token pref set)"
-      : "Bearer auth DISABLED: /write and /attach are unauthenticated " +
+      : published
+        ? "Bearer auth REQUIRED but no token pref set: /write and /attach are " +
+          "refused because publicBaseURL publishes them beyond loopback."
+        : "Bearer auth DISABLED: /write and /attach are unauthenticated " +
           "(loopback-only default). Do not expose beyond loopback in this state.",
   );
 

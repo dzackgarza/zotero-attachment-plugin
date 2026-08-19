@@ -30,9 +30,10 @@ The plugin cannot tell a loopback request from a tunnelled one — cloudflared f
 So "unset pref = open" is safe only on loopback, and the guard against exposing an unauthenticated write surface lives at the deployment boundary: `just tunnel-setup`, `tunnel-install`, and `tunnel-restart`, plus the unit's `ExecStartPre` on every start (including at boot), all run `dev/cloudflared/require-write-token.sh`, which probes the **live** plugin (an unauthenticated `POST /write` must return 401) and refuses otherwise.
 The add-on also logs its auth state at startup (`Bearer auth ENABLED`/`DISABLED`).
 
-Residual, stated plainly: this is checked at every *start*, not continuously.
-If you clear the token pref while the tunnel is already running, the write surface stays exposed until the next restart.
-The plugin can't detect exposure, so closing that window fully isn't possible in this design — don't clear the token while the tunnel is up.
+That start-time guard is no longer the only one.
+The plugin also refuses `/write` and `/attach` per request whenever `publicBaseURL` is set and the token pref is not, so clearing the token while the tunnel is up now returns 401 immediately rather than leaving the surface exposed until the next restart.
+`publicBaseURL` is the plugin's own record that it is reachable off-loopback, which is what lets it tell the two regimes apart.
+Unauthenticated on loopback with neither pref set remains the documented default.
 
 There is no Cloudflare Access policy in front, deliberately: Access needs two headers (`CF-Access-Client-Id`/`-Secret`) and a Custom GPT Action can send exactly one credential.
 
