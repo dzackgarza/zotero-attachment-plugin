@@ -86,7 +86,7 @@ Prerequisites: `cloudflared` is logged in (`~/.cloudflared/cert.pem` exists), Zo
 
 3. Schema → **Import from URL** → `https://zotero-write.dzackgarza.com/openapi.yaml`.
 
-4. The three operations appear.
+4. The four operations appear.
    Test with a prompt like *"What version is the Zotero write API running?"* (calls `/version`), then *"File this paper: …"* (calls `/write`).
 
 ## Operations
