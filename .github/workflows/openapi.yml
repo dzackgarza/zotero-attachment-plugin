@@ -41,19 +41,22 @@ jobs:
       # against a valid empty document so the diff shows the whole API as
       # additions and the breaking check has no false breakages. A committed
       # fake baseline is never used.
+      # The base spec must live inside the workspace: the oasdiff actions run
+      # in Docker with only $GITHUB_WORKSPACE mounted at their working
+      # directory, so a $RUNNER_TEMP path does not exist in the container.
       - name: Resolve base schema
         id: base
         run: |
           base_ref="${{ github.base_ref || github.ref_name }}"
           if git cat-file -e "origin/${base_ref}:openapi.yaml" 2>/dev/null; then
-            git show "origin/${base_ref}:openapi.yaml" > "$RUNNER_TEMP/base-openapi.yaml"
+            git show "origin/${base_ref}:openapi.yaml" > base-openapi.yaml
             echo "Base schema found on origin/${base_ref}."
           else
             printf 'openapi: 3.1.0\ninfo:\n  title: Zotero Local Write API\n  version: 0.0.0\npaths: {}\n' \
-              > "$RUNNER_TEMP/base-openapi.yaml"
+              > base-openapi.yaml
             echo "No base schema on origin/${base_ref}; using ephemeral empty document."
           fi
-          echo "path=$RUNNER_TEMP/base-openapi.yaml" >> "$GITHUB_OUTPUT"
+          echo "path=base-openapi.yaml" >> "$GITHUB_OUTPUT"
 
       - name: Validate revised schema
         uses: oasdiff/oasdiff-action/validate@v0
