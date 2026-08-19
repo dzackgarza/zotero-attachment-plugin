@@ -178,11 +178,18 @@ def _prove_bearer_gate(base_url: str, write_path: str, token: str) -> None:
         "instance already requires a token but none was given; pass --token to prove the gate",
     )
     probe_token = secrets.token_hex(16)
+    # Printed before it is written: this value goes into a persistent pref on a real
+    # profile, so a run interrupted between the set and the clear would otherwise leave
+    # the instance behind a token nobody knows. With it on stderr the operator can
+    # recover by clearing extensions.zotero.localWriteAPI.token in the Config Editor,
+    # or by replaying the clear with this bearer.
+    print(f"live-smoke: provisioning temporary write token {probe_token}", file=sys.stderr)
     # run_javascript serializes the code's return value, so each snippet must
     # return something JSON-encodable (a bare Prefs.set/clear returns undefined).
     _run_javascript(
         base_url, write_path, f"Zotero.Prefs.set({TOKEN_PREF!r}, {probe_token!r}, true); return true;"
     )
+    auth = {"Authorization": f"Bearer {probe_token}"}
     try:
         _prove_bearer_auth(base_url, write_path, probe_token)
     finally:
@@ -190,8 +197,14 @@ def _prove_bearer_gate(base_url: str, write_path: str, token: str) -> None:
             base_url,
             write_path,
             f"Zotero.Prefs.clear({TOKEN_PREF!r}, true); return true;",
-            auth_headers={"Authorization": f"Bearer {probe_token}"},
+            auth_headers=auth,
         )
+
+    # The published-without-token deny branch (publicBaseURL set, token unset) is NOT
+    # proved here on purpose. Reaching that state means /write denies every request,
+    # including the run_javascript needed to clear either pref, so a proof that entered
+    # it could not get back out and would leave the instance unusable. Proving it needs
+    # a disposable profile, not the operator's own.
 
 
 def _require(condition: bool, message: str) -> None:
